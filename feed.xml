@@ -1,1 +1,186 @@
-<?xml version="1.0" encoding="utf-8"?><?xml-stylesheet type="text/xsl" href="https://www.lazurkin.de/xml/base.min.xml"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>LAZURKIN</title><link>https://www.lazurkin.de/</link><description>Recent content on LAZURKIN</description><generator>Hugo -- gohugo.io</generator><language>en-US</language><lastBuildDate>Sun, 18 Feb 2024 12:59:59 +0100</lastBuildDate><atom:link rel="self" href="https://www.lazurkin.de/feed.xml" type="application/rss+xml"/></channel></rss>
+<?xml version="1.0" encoding="utf-8"?><?xml-stylesheet type="text/xsl" href="https://www.lazurkin.de/xml/base.min.xml"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>LAZURKIN</title><link>https://www.lazurkin.de/</link><description>Recent content on LAZURKIN</description><generator>Hugo -- gohugo.io</generator><language>en-US</language><lastBuildDate>Sun, 18 Feb 2024 12:59:59 +0100</lastBuildDate><atom:link rel="self" href="https://www.lazurkin.de/feed.xml" type="application/rss+xml"/><item><title>Modern CI antipattern</title><link>https://www.lazurkin.de/blog/modern_ci_antipattern/</link><pubDate>Thu, 07 Mar 2024 00:00:00 +0000</pubDate><guid>https://www.lazurkin.de/blog/modern_ci_antipattern/</guid><description>&lt;div class="toc">
+&lt;nav id="TableOfContents">
+&lt;ul>
+&lt;li>&lt;a href="#case-study">Case study&lt;/a>&lt;/li>
+&lt;li>&lt;a href="#whats-wrong-with-it">What&amp;rsquo;s wrong with it?&lt;/a>&lt;/li>
+&lt;li>&lt;a href="#what-to-do">What to do?&lt;/a>&lt;/li>
+&lt;/ul>
+&lt;/nav>
+&lt;/div>
+&lt;p>Have you ever used modern CI platforms like &lt;a href="https://docs.gitlab.com/ee/ci/">GitLab CI&lt;/a> or &lt;a href="https://docs.github.com/en/actions">GitHub Actions&lt;/a>?&lt;/p>
+&lt;p>Then you know that usually pipeline configuration comes from &lt;a href="https://yaml.org/">YAML&lt;/a> files. In most cases, this is not a single YAML but the whole jungle of files with references, inheritance, inlined shell scripts, and other disgusting things. I do see it as an antipattern people should avoid. Let&amp;rsquo;s see why.&lt;/p>
+&lt;h2 id="case-study">
+&lt;a class="Heading-link u-clickable" href="https://www.lazurkin.de/blog/modern_ci_antipattern/#case-study">Case study&lt;/a>
+&lt;/h2>
+&lt;p>This site you are currently reading is a static site generated with &lt;a href="https://gohugo.io/">Hugo&lt;/a> and hosted on &lt;a href="https://pages.github.com/">GitHub Pages&lt;/a>. One option to publish the site to GitHub Pages is to use GitHub Actions which I considered.&lt;/p>
+&lt;p>So let&amp;rsquo;s take a look at the proposed &lt;a href="https://gohugo.io/hosting-and-deployment/hosting-on-github/">Deploy Hugo site to GitHub Pages&lt;/a> pipeline:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;">&lt;code class="language-yaml" data-lang="yaml">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#888"># Sample workflow for building and deploying a Hugo site to GitHub Pages&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Deploy Hugo site to Pages&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#b06;font-weight:bold">on&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#888"># Runs on pushes targeting the default branch&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">push&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">branches&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- main&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#888"># Allows you to run this workflow manually from the Actions tab&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">workflow_dispatch&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#888"># Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#b06;font-weight:bold">permissions&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">contents&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>read&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">pages&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>write&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">id-token&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>write&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#888"># Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#888"># However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#b06;font-weight:bold">concurrency&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">group&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;pages&amp;#34;&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">cancel-in-progress&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#080;font-weight:bold">false&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#888"># Default to bash&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#b06;font-weight:bold">defaults&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">shell&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>bash&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#b06;font-weight:bold">jobs&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#888"># Build job&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">build&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">runs-on&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>ubuntu-latest&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">env&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">HUGO_VERSION&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#00d;font-weight:bold">0.123.0&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">steps&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Install Hugo CLI&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>|&lt;span style="color:#d20;background-color:#fff0f0">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#d20;background-color:#fff0f0"> wget -O ${{ runner.temp }}/hugo.deb \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#d20;background-color:#fff0f0"> https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#d20;background-color:#fff0f0"> &amp;amp;&amp;amp; sudo dpkg -i ${{ runner.temp }}/hugo.deb&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Install Dart Sass&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>sudo snap install dart-sass&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Checkout&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">uses&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>actions/checkout@v4&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">with&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">submodules&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>recursive&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">fetch-depth&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#00d;font-weight:bold">0&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Setup Pages&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">id&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>pages&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">uses&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>actions/configure-pages@v4&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Install Node.js dependencies&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;[[ -f package-lock.json || -f npm-shrinkwrap.json ]] &amp;amp;&amp;amp; npm ci || true&amp;#34;&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Build with Hugo&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">env&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#888"># For maximum backward compatibility with Hugo modules&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">HUGO_ENVIRONMENT&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>production&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">HUGO_ENV&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>production&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>|&lt;span style="color:#d20;background-color:#fff0f0">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#d20;background-color:#fff0f0"> hugo \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#d20;background-color:#fff0f0"> --gc \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#d20;background-color:#fff0f0"> --minify \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#d20;background-color:#fff0f0"> --baseURL &amp;#34;${{ steps.pages.outputs.base_url }}/&amp;#34;&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Upload artifact&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">uses&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>actions/upload-pages-artifact@v2&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">with&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">path&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>./public&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#888"># Deployment job&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">deploy&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">environment&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>github-pages&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">url&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>${{ steps.deployment.outputs.page_url }}&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">runs-on&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>ubuntu-latest&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">needs&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>build&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">steps&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Deploy to GitHub Pages&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">id&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>deployment&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">uses&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>actions/deploy-pages@v3&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>
+&lt;p>Just to generate a static site and make it available on GitHub Pages you would need:&lt;/p>
+&lt;ul>
+&lt;li>
+&lt;p>80 lines of YAML&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>Inline shell scripts
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;">&lt;code class="language-sh" data-lang="sh">&lt;span style="display:flex;">&lt;span>wget -O &lt;span style="color:#33b;background-color:#fff0f0">${&lt;/span>{ runner.temp &lt;span style="color:#33b;background-color:#fff0f0">}&lt;/span>}/hugo.deb &lt;span style="color:#04d;background-color:#fff0f0">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#04d;background-color:#fff0f0">&lt;/span> https://github.com/gohugoio/hugo/releases/download/v&lt;span style="color:#33b;background-color:#fff0f0">${&lt;/span>&lt;span style="color:#369">HUGO_VERSION&lt;/span>&lt;span style="color:#33b;background-color:#fff0f0">}&lt;/span>/hugo_extended_&lt;span style="color:#33b;background-color:#fff0f0">${&lt;/span>&lt;span style="color:#369">HUGO_VERSION&lt;/span>&lt;span style="color:#33b;background-color:#fff0f0">}&lt;/span>_linux-amd64.deb &lt;span style="color:#04d;background-color:#fff0f0">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#04d;background-color:#fff0f0">&lt;/span> &amp;amp;&amp;amp; sudo dpkg -i &lt;span style="color:#33b;background-color:#fff0f0">${&lt;/span>{ runner.temp &lt;span style="color:#33b;background-color:#fff0f0">}&lt;/span>}/hugo.deb
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>...
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>[[ -f package-lock.json || -f npm-shrinkwrap.json ]] &amp;amp;&amp;amp; npm ci || &lt;span style="color:#038">true&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>...
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>hugo &lt;span style="color:#04d;background-color:#fff0f0">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#04d;background-color:#fff0f0">&lt;/span> --gc &lt;span style="color:#04d;background-color:#fff0f0">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#04d;background-color:#fff0f0">&lt;/span> --minify &lt;span style="color:#04d;background-color:#fff0f0">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#04d;background-color:#fff0f0">&lt;/span> --baseURL &lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;&lt;/span>&lt;span style="color:#33b;background-color:#fff0f0">${&lt;/span>{ steps.pages.outputs.base_url &lt;span style="color:#33b;background-color:#fff0f0">}&lt;/span>&lt;span style="color:#d20;background-color:#fff0f0">}/&amp;#34;&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>Magic values
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;">&lt;code class="language-yaml" data-lang="yaml">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#b06;font-weight:bold">uses&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>actions/configure-pages@v4&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#b06;font-weight:bold">...&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#b06;font-weight:bold">uses&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>actions/upload-pages-artifact@v2&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#b06;font-weight:bold">...&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#b06;font-weight:bold">uses&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>actions/deploy-pages@v3&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>```&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;/p>
+&lt;/li>
+&lt;/ul>
+&lt;p>To understand all of this, you have to&lt;/p>
+&lt;ul>
+&lt;li>get familiar with &lt;a href="https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions">GitHub Actions YAML DSL&lt;/a>&lt;/li>
+&lt;li>understand shell scripts which should be the easiest part here&lt;/li>
+&lt;li>understand magic values&lt;/li>
+&lt;/ul>
+&lt;p>These magic values are GitHub Actions carefully prepared by the GitHub Actions Team for your convenience.&lt;/p>
+&lt;p>For example &lt;a href="https://github.com/actions/upload-pages-artifact/blob/v2/action.yml">actions/upload-pages-artifact@v2&lt;/a> is a 71 lines YAML file, while
+&lt;a href="https://github.com/actions/configure-pages/tree/v4">actions/configure-pages@v4&lt;/a> and &lt;a href="https://github.com/actions/deploy-pages/tree/v3">actions/deploy-pages@v3&lt;/a> are 2 complex JavaScript based actions. If not getting deep into implementation details you at least would need to understand how to use these building blocks, their input and output parameters. And it is not as straightforward as with any programming language you used to work.&lt;/p>
+&lt;h2 id="whats-wrong-with-it">
+&lt;a class="Heading-link u-clickable" href="https://www.lazurkin.de/blog/modern_ci_antipattern/#whats-wrong-with-it">What&amp;rsquo;s wrong with it?&lt;/a>
+&lt;/h2>
+&lt;p>The example above is a very simple task - publishing a static site. In enterprise development, CI pipelines are way more complicated with testing, linting, versioning, and other activities. And if you fall into a trap of all these convenient actions and templates, you start including them in your project, configuring them with parameters for your needs, inheriting them, producing your own actions and templates, and spawning tons of interconnected YAML files. It is a project in itself that requires heavy maintenance. In big companies there even could be a dedicated team to support CI setup.&lt;/p>
+&lt;p>Here are the disadvantages of this technique:&lt;/p>
+&lt;ul>
+&lt;li>It is not possible to run CI scripts locally. After making a change to a CI script you can verify it only on a CI platform&lt;/li>
+&lt;li>As a result, there are different approaches to local development and CI&lt;/li>
+&lt;li>CI scripts require heavy maintenance, sometimes even consuming the capacity of a whole team&lt;/li>
+&lt;li>Most likely pipelines will consist of many steps, running in different containers, consuming a lot of resources, and taking a lot of time&lt;/li>
+&lt;li>If there is a dedicated team to maintain CI scripts then:
+&lt;ul>
+&lt;li>they will produce generic scripts to meet the needs of all teams even more increasing the complexity&lt;/li>
+&lt;li>developers will be detached from all these scripts caring only about the &amp;ldquo;green&amp;rdquo; pipeline without trying to understand the details&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>A complex CI setup results in a CI platform vendor lock-in&lt;/li>
+&lt;/ul>
+&lt;h2 id="what-to-do">
+&lt;a class="Heading-link u-clickable" href="https://www.lazurkin.de/blog/modern_ci_antipattern/#what-to-do">What to do?&lt;/a>
+&lt;/h2>
+&lt;p>Having already a list of problems we need to do the opposite to avoid them.&lt;/p>
+&lt;ul>
+&lt;li>CI has to be based on something that developers are not only able to run locally but do regularly. So it has to be part of building tooling&lt;/li>
+&lt;li>CI scripts have to be a thin layer to run your regular build tools only passing needed configuration&lt;/li>
+&lt;li>Don&amp;rsquo;t build generic solutions on CI. Like tests, CI has to be plain and straightforward&lt;/li>
+&lt;li>Keep CI scripts as abstract as possible delegating all details to the project you&amp;rsquo;re building&lt;/li>
+&lt;li>Don&amp;rsquo;t prepare an environment for CI in your CI scripts. Instead, prepare it in advance&lt;/li>
+&lt;li>Developers have to be responsible for CI&lt;/li>
+&lt;/ul>
+&lt;p>An ideal CI pipeline definition would be:
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;">&lt;code class="language-yaml" data-lang="yaml">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#b06;font-weight:bold">jobs&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">build&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">runs-on&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>prebuilt-docker-image-for-ci&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">steps&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Build&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>make build&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Test&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>make test&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Link&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>make lint&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Publish&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>make publish&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;/p>
+&lt;p>First of all, you prepare an environment for your job in advance - &lt;code>prebuilt-docker-image-for-ci&lt;/code>. And the second you hide all details in &lt;a href="https://www.gnu.org/software/make/manual/make.html">Makefile&lt;/a>.&lt;/p>
+&lt;p>In Java world with tools like &lt;a href="https://maven.apache.org/">Maven&lt;/a>, &lt;a href="https://gradle.org/">Gradle&lt;/a> or &lt;a href="https://www.scala-sbt.org/">sbt&lt;/a> it would be even simpler:
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;">&lt;code class="language-yaml" data-lang="yaml">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#b06;font-weight:bold">jobs&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">build&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">runs-on&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>prebuild-docker-image-for-ci&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">steps&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Build&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>mvn deploy&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;/p>
+&lt;p>In this case, you won&amp;rsquo;t have a fancy pipeline diagram and to understand what failed you need to look into logs, but it is the most efficient and natural approach. I&amp;rsquo;d say even more - CI platforms have to be able to understand the output of all popular build tools to be able to draw pipeline diagrams dynamically instead of forcing us to adapt to them.&lt;/p>
+&lt;p>Let&amp;rsquo;s not be fooled by the sham convenience of modern CI platforms and properly control what and how we do the CI.&lt;/p>
+&lt;p>Happy coding, everyone!&lt;/p></description></item></channel></rss>

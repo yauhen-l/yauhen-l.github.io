@@ -1,345 +1,114 @@
-<!DOCTYPE html>
-<html lang="en-US">
-
-<head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
-  
-  <meta charset="utf-8">
-
-
-
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-
-  
-    <meta name="description" content="Case study What&rsquo;s wrong with it? What to do? Have you ever used modern CI platforms like GitLab CI or GitHub Actions?
-Then you know that usually pipeline configuration comes from YAML files. In most cases, this is not a single YAML but the whole jungle of files with references, inheritance, inlined shell scripts, and other disgusting things. I do see it as an antipattern people should avoid. Let&rsquo;s see why.">
-  
-
-
-<meta name="color-scheme" content="light dark">
-
-
-
-
-
-
-
-<meta name="generator" content="Hugo 0.123.7">
-  <title>Modern CI antipattern | LAZURKIN</title>
-  <link rel="canonical" href="http://localhost:1313/blog/modern_ci_antipattern/">
-
-
-
-
-  
-
-
-
-
-  
-  
-    
-    
-  
-  
-
-
-
-
-
-  
-    
-  
-  
-    <link rel="stylesheet" href="/css/base.min.adbe06985618d12f227798a211b34190c3693e4f1cf0783e4cab2f24cdac7e2b.css">
-
-
-
-</head>
-
-<body>
-  <nav class="u-background">
-  <div class="u-wrapper">
-    <ul class="Banner">
-      <li class="Banner-item Banner-item--title">
-        <h1 class="Banner-heading">
-          <a class="Banner-link u-clickable" href="/">LAZURKIN</a>
-        </h1>
-      </li>
-      
-
-
-      
-        
-        
-        
-          <li class="Banner-item ">
-            
-            
-            <a class="Banner-link u-clickable" href="/about/">About</a>
-          </li>
-        
-      
-        
-        
-        
-          <li class="Banner-item ">
-            
-            
-            <a class="Banner-link u-clickable" href="/blog/">Blog</a>
-          </li>
-        
-      
-        
-        
-        
-        
-        
-      
-    </ul>
-  </div>
-</nav>
-
-  <main>
-    <div class="u-wrapper">
-      <div class="u-padding">
-        
-
-  <article>
-    <header class="Heading">
-  <h2 class="Heading-title">
-    <a class="Heading-link u-clickable" href="/blog/modern_ci_antipattern/" rel="bookmark">Modern CI antipattern</a>
-  </h2>
-  
-    <time datetime="2024-03-07T00:00:00Z">March 7, 2024</time>
-  
-</header>
-    <div class="toc">
-  <nav id="TableOfContents">
-  <ul>
-    <li><a href="#case-study">Case study</a></li>
-    <li><a href="#whats-wrong-with-it">What&rsquo;s wrong with it?</a></li>
-    <li><a href="#what-to-do">What to do?</a></li>
-  </ul>
-</nav>
-</div>
-
-<p>Have you ever used modern CI platforms like <a href="https://docs.gitlab.com/ee/ci/">GitLab CI</a> or <a href="https://docs.github.com/en/actions">GitHub Actions</a>?</p>
-<p>Then you know that usually pipeline configuration comes from <a href="https://yaml.org/">YAML</a> files. In most cases, this is not a single YAML but the whole jungle of files with references, inheritance, inlined shell scripts, and other disgusting things. I do see it as an antipattern people should avoid. Let&rsquo;s see why.</p>
-<h2 id="case-study">
-  <a class="Heading-link u-clickable" href="/blog/modern_ci_antipattern/#case-study">Case study</a>
-</h2>
-<p>This site you are currently reading is a static site generated with <a href="https://gohugo.io/">Hugo</a> and hosted on <a href="https://pages.github.com/">GitHub Pages</a>. One option to publish the site to GitHub Pages is to use GitHub Actions which I considered.</p>
-<p>So let&rsquo;s take a look at the proposed <a href="https://gohugo.io/hosting-and-deployment/hosting-on-github/">Deploy Hugo site to GitHub Pages</a> pipeline:</p>
-<div class="highlight"><pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#888"># Sample workflow for building and deploying a Hugo site to GitHub Pages</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb"></span><span style="color:#b06;font-weight:bold">name</span>:<span style="color:#bbb"> </span>Deploy Hugo site to Pages<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb"></span><span style="color:#b06;font-weight:bold">on</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#888"># Runs on pushes targeting the default branch</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#b06;font-weight:bold">push</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">    </span><span style="color:#b06;font-weight:bold">branches</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span>- main<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#888"># Allows you to run this workflow manually from the Actions tab</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#b06;font-weight:bold">workflow_dispatch</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb"></span><span style="color:#888"># Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb"></span><span style="color:#b06;font-weight:bold">permissions</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#b06;font-weight:bold">contents</span>:<span style="color:#bbb"> </span>read<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#b06;font-weight:bold">pages</span>:<span style="color:#bbb"> </span>write<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#b06;font-weight:bold">id-token</span>:<span style="color:#bbb"> </span>write<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb"></span><span style="color:#888"># Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb"></span><span style="color:#888"># However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb"></span><span style="color:#b06;font-weight:bold">concurrency</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#b06;font-weight:bold">group</span>:<span style="color:#bbb"> </span><span style="color:#d20;background-color:#fff0f0">&#34;pages&#34;</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#b06;font-weight:bold">cancel-in-progress</span>:<span style="color:#bbb"> </span><span style="color:#080;font-weight:bold">false</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb"></span><span style="color:#888"># Default to bash</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb"></span><span style="color:#b06;font-weight:bold">defaults</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#b06;font-weight:bold">run</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">    </span><span style="color:#b06;font-weight:bold">shell</span>:<span style="color:#bbb"> </span>bash<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb"></span><span style="color:#b06;font-weight:bold">jobs</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#888"># Build job</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#b06;font-weight:bold">build</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">    </span><span style="color:#b06;font-weight:bold">runs-on</span>:<span style="color:#bbb"> </span>ubuntu-latest<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">    </span><span style="color:#b06;font-weight:bold">env</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span><span style="color:#b06;font-weight:bold">HUGO_VERSION</span>:<span style="color:#bbb"> </span><span style="color:#00d;font-weight:bold">0.123.0</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">    </span><span style="color:#b06;font-weight:bold">steps</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span>- <span style="color:#b06;font-weight:bold">name</span>:<span style="color:#bbb"> </span>Install Hugo CLI<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">run</span>:<span style="color:#bbb"> </span>|<span style="color:#d20;background-color:#fff0f0">
-</span></span></span><span style="display:flex;"><span><span style="color:#d20;background-color:#fff0f0">          wget -O ${{ runner.temp }}/hugo.deb \
-</span></span></span><span style="display:flex;"><span><span style="color:#d20;background-color:#fff0f0">          https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb \
-</span></span></span><span style="display:flex;"><span><span style="color:#d20;background-color:#fff0f0">          &amp;&amp; sudo dpkg -i ${{ runner.temp }}/hugo.deb</span><span style="color:#bbb">          
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span>- <span style="color:#b06;font-weight:bold">name</span>:<span style="color:#bbb"> </span>Install Dart Sass<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">run</span>:<span style="color:#bbb"> </span>sudo snap install dart-sass<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span>- <span style="color:#b06;font-weight:bold">name</span>:<span style="color:#bbb"> </span>Checkout<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">uses</span>:<span style="color:#bbb"> </span>actions/checkout@v4<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">with</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">          </span><span style="color:#b06;font-weight:bold">submodules</span>:<span style="color:#bbb"> </span>recursive<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">          </span><span style="color:#b06;font-weight:bold">fetch-depth</span>:<span style="color:#bbb"> </span><span style="color:#00d;font-weight:bold">0</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span>- <span style="color:#b06;font-weight:bold">name</span>:<span style="color:#bbb"> </span>Setup Pages<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">id</span>:<span style="color:#bbb"> </span>pages<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">uses</span>:<span style="color:#bbb"> </span>actions/configure-pages@v4<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span>- <span style="color:#b06;font-weight:bold">name</span>:<span style="color:#bbb"> </span>Install Node.js dependencies<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">run</span>:<span style="color:#bbb"> </span><span style="color:#d20;background-color:#fff0f0">&#34;[[ -f package-lock.json || -f npm-shrinkwrap.json ]] &amp;&amp; npm ci || true&#34;</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span>- <span style="color:#b06;font-weight:bold">name</span>:<span style="color:#bbb"> </span>Build with Hugo<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">env</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">          </span><span style="color:#888"># For maximum backward compatibility with Hugo modules</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">          </span><span style="color:#b06;font-weight:bold">HUGO_ENVIRONMENT</span>:<span style="color:#bbb"> </span>production<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">          </span><span style="color:#b06;font-weight:bold">HUGO_ENV</span>:<span style="color:#bbb"> </span>production<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">run</span>:<span style="color:#bbb"> </span>|<span style="color:#d20;background-color:#fff0f0">
-</span></span></span><span style="display:flex;"><span><span style="color:#d20;background-color:#fff0f0">          hugo \
-</span></span></span><span style="display:flex;"><span><span style="color:#d20;background-color:#fff0f0">            --gc \
-</span></span></span><span style="display:flex;"><span><span style="color:#d20;background-color:#fff0f0">            --minify \
-</span></span></span><span style="display:flex;"><span><span style="color:#d20;background-color:#fff0f0">            --baseURL &#34;${{ steps.pages.outputs.base_url }}/&#34;</span><span style="color:#bbb">          
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span>- <span style="color:#b06;font-weight:bold">name</span>:<span style="color:#bbb"> </span>Upload artifact<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">uses</span>:<span style="color:#bbb"> </span>actions/upload-pages-artifact@v2<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">with</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">          </span><span style="color:#b06;font-weight:bold">path</span>:<span style="color:#bbb"> </span>./public<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#888"># Deployment job</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#b06;font-weight:bold">deploy</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">    </span><span style="color:#b06;font-weight:bold">environment</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span><span style="color:#b06;font-weight:bold">name</span>:<span style="color:#bbb"> </span>github-pages<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span><span style="color:#b06;font-weight:bold">url</span>:<span style="color:#bbb"> </span>${{ steps.deployment.outputs.page_url }}<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">    </span><span style="color:#b06;font-weight:bold">runs-on</span>:<span style="color:#bbb"> </span>ubuntu-latest<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">    </span><span style="color:#b06;font-weight:bold">needs</span>:<span style="color:#bbb"> </span>build<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">    </span><span style="color:#b06;font-weight:bold">steps</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span>- <span style="color:#b06;font-weight:bold">name</span>:<span style="color:#bbb"> </span>Deploy to GitHub Pages<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">id</span>:<span style="color:#bbb"> </span>deployment<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">uses</span>:<span style="color:#bbb"> </span>actions/deploy-pages@v3</span></span></code></pre></div>
-<p>Just to generate a static site and make it available on GitHub Pages you would need:</p>
-<ul>
-<li>
-<p>80 lines of YAML</p>
-</li>
-<li>
-<p>Inline shell scripts
-<div class="highlight"><pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;"><code class="language-sh" data-lang="sh"><span style="display:flex;"><span>wget -O <span style="color:#33b;background-color:#fff0f0">${</span>{ runner.temp <span style="color:#33b;background-color:#fff0f0">}</span>}/hugo.deb <span style="color:#04d;background-color:#fff0f0">\
-</span></span></span><span style="display:flex;"><span><span style="color:#04d;background-color:#fff0f0"></span>  https://github.com/gohugoio/hugo/releases/download/v<span style="color:#33b;background-color:#fff0f0">${</span><span style="color:#369">HUGO_VERSION</span><span style="color:#33b;background-color:#fff0f0">}</span>/hugo_extended_<span style="color:#33b;background-color:#fff0f0">${</span><span style="color:#369">HUGO_VERSION</span><span style="color:#33b;background-color:#fff0f0">}</span>_linux-amd64.deb <span style="color:#04d;background-color:#fff0f0">\
-</span></span></span><span style="display:flex;"><span><span style="color:#04d;background-color:#fff0f0"></span>  &amp;&amp; sudo dpkg -i <span style="color:#33b;background-color:#fff0f0">${</span>{ runner.temp <span style="color:#33b;background-color:#fff0f0">}</span>}/hugo.deb
-</span></span><span style="display:flex;"><span>...
-</span></span><span style="display:flex;"><span>[[ -f package-lock.json || -f npm-shrinkwrap.json ]] &amp;&amp; npm ci || <span style="color:#038">true</span>
-</span></span><span style="display:flex;"><span>...
-</span></span><span style="display:flex;"><span>hugo <span style="color:#04d;background-color:#fff0f0">\
-</span></span></span><span style="display:flex;"><span><span style="color:#04d;background-color:#fff0f0"></span>  --gc <span style="color:#04d;background-color:#fff0f0">\
-</span></span></span><span style="display:flex;"><span><span style="color:#04d;background-color:#fff0f0"></span>  --minify <span style="color:#04d;background-color:#fff0f0">\
-</span></span></span><span style="display:flex;"><span><span style="color:#04d;background-color:#fff0f0"></span>  --baseURL <span style="color:#d20;background-color:#fff0f0">&#34;</span><span style="color:#33b;background-color:#fff0f0">${</span>{ steps.pages.outputs.base_url <span style="color:#33b;background-color:#fff0f0">}</span><span style="color:#d20;background-color:#fff0f0">}/&#34;</span></span></span></code></pre></div></p>
-</li>
-<li>
-<p>Magic values
-<div class="highlight"><pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#b06;font-weight:bold">uses</span>:<span style="color:#bbb"> </span>actions/configure-pages@v4<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb"></span><span style="color:#b06;font-weight:bold">...</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb"></span><span style="color:#b06;font-weight:bold">uses</span>:<span style="color:#bbb"> </span>actions/upload-pages-artifact@v2<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb"></span><span style="color:#b06;font-weight:bold">...</span><span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb"></span><span style="color:#b06;font-weight:bold">uses</span>:<span style="color:#bbb"> </span>actions/deploy-pages@v3<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb"></span>```</span></span></code></pre></div></p>
-</li>
-</ul>
-<p>To understand all of this, you have to</p>
-<ul>
-<li>get familiar with <a href="https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions">GitHub Actions YAML DSL</a></li>
-<li>understand shell scripts which should be the easiest part here</li>
-<li>understand magic values</li>
-</ul>
-<p>These magic values are GitHub Actions carefully prepared by the GitHub Actions Team for your convenience.</p>
-<p>For example <a href="https://github.com/actions/upload-pages-artifact/blob/v2/action.yml">actions/upload-pages-artifact@v2</a> is a 71 lines YAML file, while
-<a href="https://github.com/actions/configure-pages/tree/v4">actions/configure-pages@v4</a> and <a href="https://github.com/actions/deploy-pages/tree/v3">actions/deploy-pages@v3</a> are 2 complex JavaScript based actions. If not getting deep into implementation details you at least would need to understand how to use these building blocks, their input and output parameters. And it is not as straightforward as with any programming language you used to work.</p>
-<h2 id="whats-wrong-with-it">
-  <a class="Heading-link u-clickable" href="/blog/modern_ci_antipattern/#whats-wrong-with-it">What&rsquo;s wrong with it?</a>
-</h2>
-<p>The example above is a very simple task - publishing a static site. In enterprise development, CI pipelines are way more complicated with testing, linting, versioning, and other activities. And if you fall into a trap of all these convenient actions and templates, you start including them in your project, configuring them with parameters for your needs, inheriting them, producing your own actions and templates, and spawning tons of interconnected YAML files. It is a project in itself that requires heavy maintenance. In big companies there even could be a dedicated team to support CI setup.</p>
-<p>Here are the disadvantages of this technique:</p>
-<ul>
-<li>It is not possible to run CI scripts locally. After making a change to a CI script you can verify it only on a CI platform</li>
-<li>As a result, there are different approaches to local development and CI</li>
-<li>CI scripts require heavy maintenance, sometimes even consuming the capacity of a whole team</li>
-<li>Most likely pipelines will consist of many steps, running in different containers, consuming a lot of resources, and taking a lot of time</li>
-<li>If there is a dedicated team to maintain CI scripts then:
-<ul>
-<li>they will produce generic scripts to meet the needs of all teams even more increasing the complexity</li>
-<li>developers will be detached from all these scripts caring only about the &ldquo;green&rdquo; pipeline without trying to understand the details</li>
-</ul>
-</li>
-<li>A complex CI setup results in a CI platform vendor lock-in</li>
-</ul>
-<h2 id="what-to-do">
-  <a class="Heading-link u-clickable" href="/blog/modern_ci_antipattern/#what-to-do">What to do?</a>
-</h2>
-<p>Having already a list of problems we need to do the opposite to avoid them.</p>
-<ul>
-<li>CI has to be based on something that developers are not only able to run locally but do regularly. So it has to be part of building tooling</li>
-<li>CI scripts have to be a thin layer to run your regular build tools only passing needed configuration</li>
-<li>Don&rsquo;t build generic solutions on CI. Like tests, CI has to be plain and straightforward</li>
-<li>Keep CI scripts as abstract as possible delegating all details to the project you&rsquo;re building</li>
-<li>Don&rsquo;t prepare an environment for CI in your CI scripts. Instead, prepare it in advance</li>
-<li>Developers have to be responsible for CI</li>
-</ul>
-<p>An ideal CI pipeline definition would be:
-<div class="highlight"><pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#b06;font-weight:bold">jobs</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#b06;font-weight:bold">build</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">    </span><span style="color:#b06;font-weight:bold">runs-on</span>:<span style="color:#bbb"> </span>prebuilt-docker-image-for-ci<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">    </span><span style="color:#b06;font-weight:bold">steps</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span>- <span style="color:#b06;font-weight:bold">name</span>:<span style="color:#bbb"> </span>Build<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">run</span>:<span style="color:#bbb"> </span>make build<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span>- <span style="color:#b06;font-weight:bold">name</span>:<span style="color:#bbb"> </span>Test<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">run</span>:<span style="color:#bbb"> </span>make test<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span>- <span style="color:#b06;font-weight:bold">name</span>:<span style="color:#bbb"> </span>Link<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">run</span>:<span style="color:#bbb"> </span>make lint<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span>- <span style="color:#b06;font-weight:bold">name</span>:<span style="color:#bbb"> </span>Publish<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span><span style="color:#b06;font-weight:bold">run</span>:<span style="color:#bbb">  </span>make publish</span></span></code></pre></div></p>
-<p>First of all, you prepare an environment for your job in advance - <code>prebuilt-docker-image-for-ci</code>. And the second you hide all details in <a href="https://www.gnu.org/software/make/manual/make.html">Makefile</a>.</p>
-<p>In Java world with tools like <a href="https://maven.apache.org/">Maven</a>, <a href="https://gradle.org/">Gradle</a> or <a href="https://www.scala-sbt.org/">sbt</a> it would be even simpler:
-<div class="highlight"><pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;"><code class="language-yaml" data-lang="yaml"><span style="display:flex;"><span><span style="color:#b06;font-weight:bold">jobs</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">  </span><span style="color:#b06;font-weight:bold">build</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">    </span><span style="color:#b06;font-weight:bold">runs-on</span>:<span style="color:#bbb"> </span>prebuild-docker-image-for-ci<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">      </span><span style="color:#b06;font-weight:bold">steps</span>:<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">        </span>- <span style="color:#b06;font-weight:bold">name</span>:<span style="color:#bbb"> </span>Build<span style="color:#bbb">
-</span></span></span><span style="display:flex;"><span><span style="color:#bbb">          </span><span style="color:#b06;font-weight:bold">run</span>:<span style="color:#bbb"> </span>mvn deploy</span></span></code></pre></div></p>
-<p>In this case, you won&rsquo;t have a fancy pipeline diagram and to understand what failed you need to look into logs, but it is the most efficient and natural approach. I&rsquo;d say even more - CI platforms have to be able to understand the output of all popular build tools to be able to draw pipeline diagrams dynamically instead of forcing us to adapt to them.</p>
-<p>Let&rsquo;s not be fooled by the sham convenience of modern CI platforms and properly control what and how we do the CI.</p>
-<p>Happy coding, everyone!</p>
-
-    
-
-  
-
-  
-
-
-
-
-
-    
-  
-
-  </article>
-
-
-      </div>
-    </div>
-  </main>
-  
-  
-  <footer class="Footer">
-    <div class="u-wrapper">
-      <div class="u-padding u-noboosting">
-        ©2024 Yauhen Lazurkin
-
-        
-          
-          <span class="footer-separator"> | </span><a class="footer-item" href="/imprint">Imprint</a>
-        
-          
-          <span class="footer-separator"> | </span><a class="footer-item" href="/privacy">Privacy</a>
-        
-      </div>
-    </div>
-  </footer>
-
-
-</body>
-
-</html>
+<!doctype html><html lang=en-US><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta name=description content="Case study What&rsquo;s wrong with it? What to do? Have you ever used modern CI platforms like GitLab CI or GitHub Actions?
+Then you know that usually pipeline configuration comes from YAML files. In most cases, this is not a single YAML but the whole jungle of files with references, inheritance, inlined shell scripts, and other disgusting things. I do see it as an antipattern people should avoid. Let&rsquo;s see why."><meta name=color-scheme content="light dark"><meta name=generator content="Hugo 0.123.7"><title>Modern CI antipattern | LAZURKIN</title>
+<link rel=canonical href=https://www.lazurkin.de/blog/modern_ci_antipattern/><link rel=stylesheet href=/css/base.min.adbe06985618d12f227798a211b34190c3693e4f1cf0783e4cab2f24cdac7e2b.min.adbe06985618d12f227798a211b34190c3693e4f1cf0783e4cab2f24cdac7e2b.css integrity="sha256-rb4GmFYY0S8id5iiEbNBkMNpPk8c8Hg+TKsvJM2sfis=" crossorigin=anonymous></head><body><nav class=u-background><div class=u-wrapper><ul class=Banner><li class="Banner-item Banner-item--title"><h1 class=Banner-heading><a class="Banner-link u-clickable" href=/>LAZURKIN</a></h1></li><li class=Banner-item><a class="Banner-link u-clickable" href=/about/>About</a></li><li class=Banner-item><a class="Banner-link u-clickable" href=/blog/>Blog</a></li></ul></div></nav><main><div class=u-wrapper><div class=u-padding><article><header class=Heading><h2 class=Heading-title><a class="Heading-link u-clickable" href=/blog/modern_ci_antipattern/ rel=bookmark>Modern CI antipattern</a></h2><time datetime=2024-03-07T00:00:00Z>March 7, 2024</time></header><div class=toc><nav id=TableOfContents><ul><li><a href=#case-study>Case study</a></li><li><a href=#whats-wrong-with-it>What&rsquo;s wrong with it?</a></li><li><a href=#what-to-do>What to do?</a></li></ul></nav></div><p>Have you ever used modern CI platforms like <a href=https://docs.gitlab.com/ee/ci/>GitLab CI</a> or <a href=https://docs.github.com/en/actions>GitHub Actions</a>?</p><p>Then you know that usually pipeline configuration comes from <a href=https://yaml.org/>YAML</a> files. In most cases, this is not a single YAML but the whole jungle of files with references, inheritance, inlined shell scripts, and other disgusting things. I do see it as an antipattern people should avoid. Let&rsquo;s see why.</p><h2 id=case-study><a class="Heading-link u-clickable" href=/blog/modern_ci_antipattern/#case-study>Case study</a></h2><p>This site you are currently reading is a static site generated with <a href=https://gohugo.io/>Hugo</a> and hosted on <a href=https://pages.github.com/>GitHub Pages</a>. One option to publish the site to GitHub Pages is to use GitHub Actions which I considered.</p><p>So let&rsquo;s take a look at the proposed <a href=https://gohugo.io/hosting-and-deployment/hosting-on-github/>Deploy Hugo site to GitHub Pages</a> pipeline:</p><div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2><code class=language-yaml data-lang=yaml><span style=display:flex><span><span style=color:#888># Sample workflow for building and deploying a Hugo site to GitHub Pages</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb></span><span style=color:#b06;font-weight:700>name</span>:<span style=color:#bbb> </span>Deploy Hugo site to Pages<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb></span><span style=color:#b06;font-weight:700>on</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#888># Runs on pushes targeting the default branch</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#b06;font-weight:700>push</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>    </span><span style=color:#b06;font-weight:700>branches</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span>- main<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#888># Allows you to run this workflow manually from the Actions tab</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#b06;font-weight:700>workflow_dispatch</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb></span><span style=color:#888># Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb></span><span style=color:#b06;font-weight:700>permissions</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#b06;font-weight:700>contents</span>:<span style=color:#bbb> </span>read<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#b06;font-weight:700>pages</span>:<span style=color:#bbb> </span>write<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#b06;font-weight:700>id-token</span>:<span style=color:#bbb> </span>write<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb></span><span style=color:#888># Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb></span><span style=color:#888># However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb></span><span style=color:#b06;font-weight:700>concurrency</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#b06;font-weight:700>group</span>:<span style=color:#bbb> </span><span style=color:#d20;background-color:#fff0f0>&#34;pages&#34;</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#b06;font-weight:700>cancel-in-progress</span>:<span style=color:#bbb> </span><span style=color:#080;font-weight:700>false</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb></span><span style=color:#888># Default to bash</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb></span><span style=color:#b06;font-weight:700>defaults</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#b06;font-weight:700>run</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>    </span><span style=color:#b06;font-weight:700>shell</span>:<span style=color:#bbb> </span>bash<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb></span><span style=color:#b06;font-weight:700>jobs</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#888># Build job</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#b06;font-weight:700>build</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>    </span><span style=color:#b06;font-weight:700>runs-on</span>:<span style=color:#bbb> </span>ubuntu-latest<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>    </span><span style=color:#b06;font-weight:700>env</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span><span style=color:#b06;font-weight:700>HUGO_VERSION</span>:<span style=color:#bbb> </span><span style=color:#00d;font-weight:700>0.123.0</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>    </span><span style=color:#b06;font-weight:700>steps</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span>- <span style=color:#b06;font-weight:700>name</span>:<span style=color:#bbb> </span>Install Hugo CLI<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>run</span>:<span style=color:#bbb> </span>|<span style=color:#d20;background-color:#fff0f0>
+</span></span></span><span style=display:flex><span><span style=color:#d20;background-color:#fff0f0>          wget -O ${{ runner.temp }}/hugo.deb \
+</span></span></span><span style=display:flex><span><span style=color:#d20;background-color:#fff0f0>          https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb \
+</span></span></span><span style=display:flex><span><span style=color:#d20;background-color:#fff0f0>          &amp;&amp; sudo dpkg -i ${{ runner.temp }}/hugo.deb</span><span style=color:#bbb>          
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span>- <span style=color:#b06;font-weight:700>name</span>:<span style=color:#bbb> </span>Install Dart Sass<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>run</span>:<span style=color:#bbb> </span>sudo snap install dart-sass<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span>- <span style=color:#b06;font-weight:700>name</span>:<span style=color:#bbb> </span>Checkout<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>uses</span>:<span style=color:#bbb> </span>actions/checkout@v4<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>with</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>          </span><span style=color:#b06;font-weight:700>submodules</span>:<span style=color:#bbb> </span>recursive<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>          </span><span style=color:#b06;font-weight:700>fetch-depth</span>:<span style=color:#bbb> </span><span style=color:#00d;font-weight:700>0</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span>- <span style=color:#b06;font-weight:700>name</span>:<span style=color:#bbb> </span>Setup Pages<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>id</span>:<span style=color:#bbb> </span>pages<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>uses</span>:<span style=color:#bbb> </span>actions/configure-pages@v4<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span>- <span style=color:#b06;font-weight:700>name</span>:<span style=color:#bbb> </span>Install Node.js dependencies<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>run</span>:<span style=color:#bbb> </span><span style=color:#d20;background-color:#fff0f0>&#34;[[ -f package-lock.json || -f npm-shrinkwrap.json ]] &amp;&amp; npm ci || true&#34;</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span>- <span style=color:#b06;font-weight:700>name</span>:<span style=color:#bbb> </span>Build with Hugo<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>env</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>          </span><span style=color:#888># For maximum backward compatibility with Hugo modules</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>          </span><span style=color:#b06;font-weight:700>HUGO_ENVIRONMENT</span>:<span style=color:#bbb> </span>production<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>          </span><span style=color:#b06;font-weight:700>HUGO_ENV</span>:<span style=color:#bbb> </span>production<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>run</span>:<span style=color:#bbb> </span>|<span style=color:#d20;background-color:#fff0f0>
+</span></span></span><span style=display:flex><span><span style=color:#d20;background-color:#fff0f0>          hugo \
+</span></span></span><span style=display:flex><span><span style=color:#d20;background-color:#fff0f0>            --gc \
+</span></span></span><span style=display:flex><span><span style=color:#d20;background-color:#fff0f0>            --minify \
+</span></span></span><span style=display:flex><span><span style=color:#d20;background-color:#fff0f0>            --baseURL &#34;${{ steps.pages.outputs.base_url }}/&#34;</span><span style=color:#bbb>          
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span>- <span style=color:#b06;font-weight:700>name</span>:<span style=color:#bbb> </span>Upload artifact<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>uses</span>:<span style=color:#bbb> </span>actions/upload-pages-artifact@v2<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>with</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>          </span><span style=color:#b06;font-weight:700>path</span>:<span style=color:#bbb> </span>./public<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#888># Deployment job</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#b06;font-weight:700>deploy</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>    </span><span style=color:#b06;font-weight:700>environment</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span><span style=color:#b06;font-weight:700>name</span>:<span style=color:#bbb> </span>github-pages<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span><span style=color:#b06;font-weight:700>url</span>:<span style=color:#bbb> </span>${{ steps.deployment.outputs.page_url }}<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>    </span><span style=color:#b06;font-weight:700>runs-on</span>:<span style=color:#bbb> </span>ubuntu-latest<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>    </span><span style=color:#b06;font-weight:700>needs</span>:<span style=color:#bbb> </span>build<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>    </span><span style=color:#b06;font-weight:700>steps</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span>- <span style=color:#b06;font-weight:700>name</span>:<span style=color:#bbb> </span>Deploy to GitHub Pages<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>id</span>:<span style=color:#bbb> </span>deployment<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>uses</span>:<span style=color:#bbb> </span>actions/deploy-pages@v3</span></span></code></pre></div><p>Just to generate a static site and make it available on GitHub Pages you would need:</p><ul><li><p>80 lines of YAML</p></li><li><p>Inline shell scripts<div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2><code class=language-sh data-lang=sh><span style=display:flex><span>wget -O <span style=color:#33b;background-color:#fff0f0>${</span>{ runner.temp <span style=color:#33b;background-color:#fff0f0>}</span>}/hugo.deb <span style=color:#04d;background-color:#fff0f0>\
+</span></span></span><span style=display:flex><span><span style=color:#04d;background-color:#fff0f0></span>  https://github.com/gohugoio/hugo/releases/download/v<span style=color:#33b;background-color:#fff0f0>${</span><span style=color:#369>HUGO_VERSION</span><span style=color:#33b;background-color:#fff0f0>}</span>/hugo_extended_<span style=color:#33b;background-color:#fff0f0>${</span><span style=color:#369>HUGO_VERSION</span><span style=color:#33b;background-color:#fff0f0>}</span>_linux-amd64.deb <span style=color:#04d;background-color:#fff0f0>\
+</span></span></span><span style=display:flex><span><span style=color:#04d;background-color:#fff0f0></span>  &amp;&amp; sudo dpkg -i <span style=color:#33b;background-color:#fff0f0>${</span>{ runner.temp <span style=color:#33b;background-color:#fff0f0>}</span>}/hugo.deb
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>[[ -f package-lock.json || -f npm-shrinkwrap.json ]] &amp;&amp; npm ci || <span style=color:#038>true</span>
+</span></span><span style=display:flex><span>...
+</span></span><span style=display:flex><span>hugo <span style=color:#04d;background-color:#fff0f0>\
+</span></span></span><span style=display:flex><span><span style=color:#04d;background-color:#fff0f0></span>  --gc <span style=color:#04d;background-color:#fff0f0>\
+</span></span></span><span style=display:flex><span><span style=color:#04d;background-color:#fff0f0></span>  --minify <span style=color:#04d;background-color:#fff0f0>\
+</span></span></span><span style=display:flex><span><span style=color:#04d;background-color:#fff0f0></span>  --baseURL <span style=color:#d20;background-color:#fff0f0>&#34;</span><span style=color:#33b;background-color:#fff0f0>${</span>{ steps.pages.outputs.base_url <span style=color:#33b;background-color:#fff0f0>}</span><span style=color:#d20;background-color:#fff0f0>}/&#34;</span></span></span></code></pre></div></p></li><li><p>Magic values<div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2><code class=language-yaml data-lang=yaml><span style=display:flex><span><span style=color:#b06;font-weight:700>uses</span>:<span style=color:#bbb> </span>actions/configure-pages@v4<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb></span><span style=color:#b06;font-weight:700>...</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb></span><span style=color:#b06;font-weight:700>uses</span>:<span style=color:#bbb> </span>actions/upload-pages-artifact@v2<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb></span><span style=color:#b06;font-weight:700>...</span><span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb></span><span style=color:#b06;font-weight:700>uses</span>:<span style=color:#bbb> </span>actions/deploy-pages@v3<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb></span>```</span></span></code></pre></div></p></li></ul><p>To understand all of this, you have to</p><ul><li>get familiar with <a href=https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions>GitHub Actions YAML DSL</a></li><li>understand shell scripts which should be the easiest part here</li><li>understand magic values</li></ul><p>These magic values are GitHub Actions carefully prepared by the GitHub Actions Team for your convenience.</p><p>For example <a href=https://github.com/actions/upload-pages-artifact/blob/v2/action.yml>actions/upload-pages-artifact@v2</a> is a 71 lines YAML file, while
+<a href=https://github.com/actions/configure-pages/tree/v4>actions/configure-pages@v4</a> and <a href=https://github.com/actions/deploy-pages/tree/v3>actions/deploy-pages@v3</a> are 2 complex JavaScript based actions. If not getting deep into implementation details you at least would need to understand how to use these building blocks, their input and output parameters. And it is not as straightforward as with any programming language you used to work.</p><h2 id=whats-wrong-with-it><a class="Heading-link u-clickable" href=/blog/modern_ci_antipattern/#whats-wrong-with-it>What&rsquo;s wrong with it?</a></h2><p>The example above is a very simple task - publishing a static site. In enterprise development, CI pipelines are way more complicated with testing, linting, versioning, and other activities. And if you fall into a trap of all these convenient actions and templates, you start including them in your project, configuring them with parameters for your needs, inheriting them, producing your own actions and templates, and spawning tons of interconnected YAML files. It is a project in itself that requires heavy maintenance. In big companies there even could be a dedicated team to support CI setup.</p><p>Here are the disadvantages of this technique:</p><ul><li>It is not possible to run CI scripts locally. After making a change to a CI script you can verify it only on a CI platform</li><li>As a result, there are different approaches to local development and CI</li><li>CI scripts require heavy maintenance, sometimes even consuming the capacity of a whole team</li><li>Most likely pipelines will consist of many steps, running in different containers, consuming a lot of resources, and taking a lot of time</li><li>If there is a dedicated team to maintain CI scripts then:<ul><li>they will produce generic scripts to meet the needs of all teams even more increasing the complexity</li><li>developers will be detached from all these scripts caring only about the &ldquo;green&rdquo; pipeline without trying to understand the details</li></ul></li><li>A complex CI setup results in a CI platform vendor lock-in</li></ul><h2 id=what-to-do><a class="Heading-link u-clickable" href=/blog/modern_ci_antipattern/#what-to-do>What to do?</a></h2><p>Having already a list of problems we need to do the opposite to avoid them.</p><ul><li>CI has to be based on something that developers are not only able to run locally but do regularly. So it has to be part of building tooling</li><li>CI scripts have to be a thin layer to run your regular build tools only passing needed configuration</li><li>Don&rsquo;t build generic solutions on CI. Like tests, CI has to be plain and straightforward</li><li>Keep CI scripts as abstract as possible delegating all details to the project you&rsquo;re building</li><li>Don&rsquo;t prepare an environment for CI in your CI scripts. Instead, prepare it in advance</li><li>Developers have to be responsible for CI</li></ul><p>An ideal CI pipeline definition would be:<div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2><code class=language-yaml data-lang=yaml><span style=display:flex><span><span style=color:#b06;font-weight:700>jobs</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#b06;font-weight:700>build</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>    </span><span style=color:#b06;font-weight:700>runs-on</span>:<span style=color:#bbb> </span>prebuilt-docker-image-for-ci<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>    </span><span style=color:#b06;font-weight:700>steps</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span>- <span style=color:#b06;font-weight:700>name</span>:<span style=color:#bbb> </span>Build<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>run</span>:<span style=color:#bbb> </span>make build<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span>- <span style=color:#b06;font-weight:700>name</span>:<span style=color:#bbb> </span>Test<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>run</span>:<span style=color:#bbb> </span>make test<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span>- <span style=color:#b06;font-weight:700>name</span>:<span style=color:#bbb> </span>Link<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>run</span>:<span style=color:#bbb> </span>make lint<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span>- <span style=color:#b06;font-weight:700>name</span>:<span style=color:#bbb> </span>Publish<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span><span style=color:#b06;font-weight:700>run</span>:<span style=color:#bbb>  </span>make publish</span></span></code></pre></div></p><p>First of all, you prepare an environment for your job in advance - <code>prebuilt-docker-image-for-ci</code>. And the second you hide all details in <a href=https://www.gnu.org/software/make/manual/make.html>Makefile</a>.</p><p>In Java world with tools like <a href=https://maven.apache.org/>Maven</a>, <a href=https://gradle.org/>Gradle</a> or <a href=https://www.scala-sbt.org/>sbt</a> it would be even simpler:<div class=highlight><pre tabindex=0 style=background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2><code class=language-yaml data-lang=yaml><span style=display:flex><span><span style=color:#b06;font-weight:700>jobs</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>  </span><span style=color:#b06;font-weight:700>build</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>    </span><span style=color:#b06;font-weight:700>runs-on</span>:<span style=color:#bbb> </span>prebuild-docker-image-for-ci<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>      </span><span style=color:#b06;font-weight:700>steps</span>:<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>        </span>- <span style=color:#b06;font-weight:700>name</span>:<span style=color:#bbb> </span>Build<span style=color:#bbb>
+</span></span></span><span style=display:flex><span><span style=color:#bbb>          </span><span style=color:#b06;font-weight:700>run</span>:<span style=color:#bbb> </span>mvn deploy</span></span></code></pre></div></p><p>In this case, you won&rsquo;t have a fancy pipeline diagram and to understand what failed you need to look into logs, but it is the most efficient and natural approach. I&rsquo;d say even more - CI platforms have to be able to understand the output of all popular build tools to be able to draw pipeline diagrams dynamically instead of forcing us to adapt to them.</p><p>Let&rsquo;s not be fooled by the sham convenience of modern CI platforms and properly control what and how we do the CI.</p><p>Happy coding, everyone!</p></article></div></div></main><footer class=Footer><div class=u-wrapper><div class="u-padding u-noboosting">©2024 Yauhen Lazurkin
+<span class=footer-separator>| </span><a class=footer-item href=/imprint>Imprint</a>
+<span class=footer-separator>| </span><a class=footer-item href=/privacy>Privacy</a></div></div></footer></body></html>
