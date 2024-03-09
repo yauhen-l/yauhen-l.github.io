@@ -96,10 +96,10 @@
 &lt;p>Just to generate a static site and make it available on GitHub Pages you would need:&lt;/p>
 &lt;ul>
 &lt;li>
-&lt;p>80 lines of YAML&lt;/p>
+&lt;p>80 lines of &lt;a href="https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions">GitHub Actions YAML DSL&lt;/a>&lt;/p>
 &lt;/li>
 &lt;li>
-&lt;p>Inline shell scripts
+&lt;p>Inline shell scripts which should be the easiest part here
 &lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;">&lt;code class="language-sh" data-lang="sh">&lt;span style="display:flex;">&lt;span>wget -O &lt;span style="color:#33b;background-color:#fff0f0">${&lt;/span>{ runner.temp &lt;span style="color:#33b;background-color:#fff0f0">}&lt;/span>}/hugo.deb &lt;span style="color:#04d;background-color:#fff0f0">\
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#04d;background-color:#fff0f0">&lt;/span> https://github.com/gohugoio/hugo/releases/download/v&lt;span style="color:#33b;background-color:#fff0f0">${&lt;/span>&lt;span style="color:#369">HUGO_VERSION&lt;/span>&lt;span style="color:#33b;background-color:#fff0f0">}&lt;/span>/hugo_extended_&lt;span style="color:#33b;background-color:#fff0f0">${&lt;/span>&lt;span style="color:#369">HUGO_VERSION&lt;/span>&lt;span style="color:#33b;background-color:#fff0f0">}&lt;/span>_linux-amd64.deb &lt;span style="color:#04d;background-color:#fff0f0">\
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#04d;background-color:#fff0f0">&lt;/span> &amp;amp;&amp;amp; sudo dpkg -i &lt;span style="color:#33b;background-color:#fff0f0">${&lt;/span>{ runner.temp &lt;span style="color:#33b;background-color:#fff0f0">}&lt;/span>}/hugo.deb
@@ -112,7 +112,7 @@
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#04d;background-color:#fff0f0">&lt;/span> --baseURL &lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;&lt;/span>&lt;span style="color:#33b;background-color:#fff0f0">${&lt;/span>{ steps.pages.outputs.base_url &lt;span style="color:#33b;background-color:#fff0f0">}&lt;/span>&lt;span style="color:#d20;background-color:#fff0f0">}/&amp;#34;&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;/p>
 &lt;/li>
 &lt;li>
-&lt;p>Magic values
+&lt;p>Magic values (the most problematic part in my opinion)
 &lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;">&lt;code class="language-yaml" data-lang="yaml">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#b06;font-weight:bold">uses&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>actions/configure-pages@v4&lt;span style="color:#bbb">
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#b06;font-weight:bold">...&lt;/span>&lt;span style="color:#bbb">
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#b06;font-weight:bold">uses&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>actions/upload-pages-artifact@v2&lt;span style="color:#bbb">
@@ -120,12 +120,6 @@
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>&lt;span style="color:#b06;font-weight:bold">uses&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>actions/deploy-pages@v3&lt;span style="color:#bbb">
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb">&lt;/span>```&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;/p>
 &lt;/li>
-&lt;/ul>
-&lt;p>To understand all of this, you have to&lt;/p>
-&lt;ul>
-&lt;li>get familiar with &lt;a href="https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions">GitHub Actions YAML DSL&lt;/a>&lt;/li>
-&lt;li>understand shell scripts which should be the easiest part here&lt;/li>
-&lt;li>understand magic values&lt;/li>
 &lt;/ul>
 &lt;p>These magic values are GitHub Actions carefully prepared by the GitHub Actions Team for your convenience.&lt;/p>
 &lt;p>For example &lt;a href="https://github.com/actions/upload-pages-artifact/blob/v2/action.yml">actions/upload-pages-artifact@v2&lt;/a> is a 71 lines YAML file, while
@@ -144,6 +138,7 @@
 &lt;ul>
 &lt;li>they will produce generic scripts to meet the needs of all teams even more increasing the complexity&lt;/li>
 &lt;li>developers will be detached from all these scripts caring only about the &amp;ldquo;green&amp;rdquo; pipeline without trying to understand the details&lt;/li>
+&lt;li>I&amp;rsquo;ve seen a case when a pipeline was &amp;ldquo;green&amp;rdquo; and both parties thought that everything is fine, although it was not&lt;/li>
 &lt;/ul>
 &lt;/li>
 &lt;li>A complex CI setup results in a CI platform vendor lock-in&lt;/li>
@@ -158,7 +153,7 @@
 &lt;li>Don&amp;rsquo;t build generic solutions on CI. Like tests, CI has to be plain and straightforward&lt;/li>
 &lt;li>Keep CI scripts as abstract as possible delegating all details to the project you&amp;rsquo;re building&lt;/li>
 &lt;li>Don&amp;rsquo;t prepare an environment for CI in your CI scripts. Instead, prepare it in advance&lt;/li>
-&lt;li>Developers have to be responsible for CI&lt;/li>
+&lt;li>Developers have to be responsible for CI and not a dedicated team that knows how to do it better&lt;/li>
 &lt;/ul>
 &lt;p>An ideal CI pipeline definition would be:
 &lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;">&lt;code class="language-yaml" data-lang="yaml">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#b06;font-weight:bold">jobs&lt;/span>:&lt;span style="color:#bbb">
@@ -166,21 +161,8 @@
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">runs-on&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>prebuilt-docker-image-for-ci&lt;span style="color:#bbb">
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">steps&lt;/span>:&lt;span style="color:#bbb">
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Build&lt;span style="color:#bbb">
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>make build&lt;span style="color:#bbb">
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Test&lt;span style="color:#bbb">
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>make test&lt;span style="color:#bbb">
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Link&lt;span style="color:#bbb">
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>make lint&lt;span style="color:#bbb">
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Publish&lt;span style="color:#bbb">
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>make publish&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;/p>
-&lt;p>First of all, you prepare an environment for your job in advance - &lt;code>prebuilt-docker-image-for-ci&lt;/code>. And the second you hide all details in &lt;a href="https://www.gnu.org/software/make/manual/make.html">Makefile&lt;/a>.&lt;/p>
-&lt;p>In Java world with tools like &lt;a href="https://maven.apache.org/">Maven&lt;/a>, &lt;a href="https://gradle.org/">Gradle&lt;/a> or &lt;a href="https://www.scala-sbt.org/">sbt&lt;/a> it would be even simpler:
-&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;">&lt;code class="language-yaml" data-lang="yaml">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#b06;font-weight:bold">jobs&lt;/span>:&lt;span style="color:#bbb">
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">build&lt;/span>:&lt;span style="color:#bbb">
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">runs-on&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>prebuild-docker-image-for-ci&lt;span style="color:#bbb">
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">steps&lt;/span>:&lt;span style="color:#bbb">
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- &lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>Build&lt;span style="color:#bbb">
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>mvn deploy&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;/p>
-&lt;p>In this case, you won&amp;rsquo;t have a fancy pipeline diagram and to understand what failed you need to look into logs, but it is the most efficient and natural approach. I&amp;rsquo;d say even more - CI platforms have to be able to understand the output of all popular build tools to be able to draw pipeline diagrams dynamically instead of forcing us to adapt to them.&lt;/p>
-&lt;p>Let&amp;rsquo;s not be fooled by the sham convenience of modern CI platforms and properly control what and how we do the CI.&lt;/p>
-&lt;p>Happy coding, everyone!&lt;/p></description></item></channel></rss>
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">run&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>make build&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;/p>
+&lt;p>First of all, you prepare an environment for your job in advance - &lt;code>prebuilt-docker-image-for-ci&lt;/code>. And the second you hide all details in a &lt;a href="https://www.gnu.org/software/make/manual/make.html">Makefile&lt;/a>. That&amp;rsquo;s it! You easily can port this setup to any CI platform and any project can be adapted to this script.&lt;/p>
+&lt;p>Yes, in this case, you won&amp;rsquo;t have a fancy pipeline diagram and to understand what failed you need to look into logs, but it is the most &lt;strong>efficient&lt;/strong> and &lt;strong>natural&lt;/strong> approach. An error message from the log can be attached to the failed build notification, so you don&amp;rsquo;t even need to look at the diagram. But if the industry needs these diagrams then I&amp;rsquo;d say even more - CI platforms have to be able to understand the output of all popular build tools and visualize pipelines instead of forcing us to adapt to them.&lt;/p>
+&lt;p>Of course, the ideal cannot be achieved in every case, but at least you know another perspective and can find a balance.&lt;/p>
+&lt;p>Let&amp;rsquo;s not be fooled by the sham convenience of modern CI platforms and keep things simple.&lt;/p></description></item></channel></rss>
