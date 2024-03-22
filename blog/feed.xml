@@ -1,4 +1,6 @@
-<?xml version="1.0" encoding="utf-8"?><?xml-stylesheet type="text/xsl" href="https://www.lazurkin.de/xml/base.min.xml"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Blogs on LAZURKIN</title><link>https://www.lazurkin.de/blog/</link><description>Recent content in Blogs on LAZURKIN</description><generator>Hugo -- gohugo.io</generator><language>en-US</language><lastBuildDate>Thu, 07 Mar 2024 00:00:00 +0000</lastBuildDate><atom:link rel="self" href="https://www.lazurkin.de/blog/feed.xml" type="application/rss+xml"/><item><title>Modern CI antipattern</title><link>https://www.lazurkin.de/blog/modern_ci_antipattern/</link><pubDate>Thu, 07 Mar 2024 00:00:00 +0000</pubDate><guid>https://www.lazurkin.de/blog/modern_ci_antipattern/</guid><description>&lt;div class="toc">
+<?xml version="1.0" encoding="utf-8"?><?xml-stylesheet type="text/xsl" href="https://www.lazurkin.de/xml/base.min.xml"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Blog: Something about Software Development on Lazurkin</title><link>https://www.lazurkin.de/blog/</link><description>Recent content in Blog: Something about Software Development on Lazurkin</description><generator>Hugo -- gohugo.io</generator><language>en-US</language><lastBuildDate>Thu, 07 Mar 2024 00:00:00 +0000</lastBuildDate><atom:link rel="self" href="https://www.lazurkin.de/blog/feed.xml" type="application/rss+xml"/><item><title>Modern CI antipattern</title><link>https://www.lazurkin.de/blog/modern_ci_antipattern/</link><pubDate>Thu, 07 Mar 2024 00:00:00 +0000</pubDate><guid>https://www.lazurkin.de/blog/modern_ci_antipattern/</guid><description>&lt;p>Have you ever used modern CI platforms like &lt;a href="https://docs.gitlab.com/ee/ci/">GitLab CI&lt;/a> or &lt;a href="https://docs.github.com/en/actions">GitHub Actions&lt;/a>?&lt;/p>
+&lt;p>Then you know that usually pipeline configuration comes from &lt;a href="https://yaml.org/">YAML&lt;/a> files. In most cases, this is not a single YAML but the whole jungle of files with references, inheritance, inlined shell scripts, and other disgusting things. I do see it as an antipattern people should avoid. Let&amp;rsquo;s see why.&lt;/p>
+&lt;div class="toc">
 &lt;nav id="TableOfContents">
 &lt;ul>
 &lt;li>&lt;a href="#case-study">Case study&lt;/a>&lt;/li>
@@ -7,8 +9,6 @@
 &lt;/ul>
 &lt;/nav>
 &lt;/div>
-&lt;p>Have you ever used modern CI platforms like &lt;a href="https://docs.gitlab.com/ee/ci/">GitLab CI&lt;/a> or &lt;a href="https://docs.github.com/en/actions">GitHub Actions&lt;/a>?&lt;/p>
-&lt;p>Then you know that usually pipeline configuration comes from &lt;a href="https://yaml.org/">YAML&lt;/a> files. In most cases, this is not a single YAML but the whole jungle of files with references, inheritance, inlined shell scripts, and other disgusting things. I do see it as an antipattern people should avoid. Let&amp;rsquo;s see why.&lt;/p>
 &lt;h2 id="case-study">
 &lt;a class="Heading-link u-clickable" href="https://www.lazurkin.de/blog/modern_ci_antipattern/#case-study">Case study&lt;/a>
 &lt;/h2>
