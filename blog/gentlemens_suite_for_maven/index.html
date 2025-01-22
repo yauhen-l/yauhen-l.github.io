@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en-US">
+
+<head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+  
+  <meta charset="utf-8">
+
+
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+
+  
+    <meta name="description" content="While there exist more modern tools to build a Java project Maven still remains #1 (my opinion).
+
+  In project
+
+
+  Enforcer plugin
+
+Maven Enforcer plugin
+
+  Always executed
+
+Dependency Convergence rule
+
+  Executed during release on CI
+
+Require Release Dependencies
+
+      &lt;plugin&gt;
+        &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
+        &lt;artifactId&gt;maven-enforcer-plugin&lt;/artifactId&gt;
+        &lt;version&gt;3.4.1&lt;/version&gt;
+        &lt;executions&gt;
+          &lt;execution&gt;
+            &lt;id&gt;enforce&lt;/id&gt;
+            &lt;configuration&gt;
+              &lt;rules&gt;
+                &lt;dependencyConvergence/&gt;
+              &lt;/rules&gt;
+            &lt;/configuration&gt;
+            &lt;goals&gt;
+              &lt;goal&gt;enforce&lt;/goal&gt;
+            &lt;/goals&gt;
+          &lt;/execution&gt;
+        &lt;/executions&gt;
+      &lt;/plugin&gt;
+      ```
+
+## Formatter
+
+[fmt-maven-plugin](https://github.com/spotify/fmt-maven-plugin)
+
+# In settings.xml
+
+
+# On CI
+
+
+[Maven Git versioning extension](https://github.com/qoomon/maven-git-versioning-extension)
+
+`.mvn/extensions.xml`:
+">
+  
+
+
+<meta name="color-scheme" content="light dark">
+
+
+
+
+
+
+
+<meta name="generator" content="Hugo 0.140.2">
+  <title>Gentlemen&#39;s suite for Maven | Lazurkin</title>
+  <link rel="canonical" href="http://192.168.2.197:1313/blog/gentlemens_suite_for_maven/">
+
+
+
+
+  
+
+
+
+
+  
+  
+    
+    
+  
+  
+
+
+
+
+
+  
+    
+  
+  
+    <link rel="stylesheet" href="/css/base.min.5fce81b8c31433a64c076fbdf2c716716b3319646d19cd9d29b7e3a0dabc91c1.css">
+
+
+
+</head>
+
+<body>
+  <nav class="u-background">
+  <div class="u-wrapper">
+    <ul class="Banner">
+      <li class="Banner-item Banner-item--title">
+        <h1 class="Banner-heading">
+          <a class="Banner-link u-clickable" href="/">Lazurkin</a>
+        </h1>
+      </li>
+      
+
+
+      
+        
+        
+        
+      
+        
+          <li class="Banner-item ">
+            <a class="Banner-link u-clickable" href="/about/">About</a>
+          </li>
+        
+      
+        
+        
+        
+      
+        
+          <li class="Banner-item ">
+            <a class="Banner-link u-clickable" href="/blog/">Blog</a>
+          </li>
+        
+      
+        
+        
+        
+      
+        
+          
+        
+      
+    </ul>
+  </div>
+</nav>
+
+  <main>
+    <div class="u-wrapper">
+      <div class="u-padding">
+        
+
+  <article>
+    <header class="Heading">
+  <h2 class="Heading-title">
+    <a class="Heading-link u-clickable" href="/blog/gentlemens_suite_for_maven/" rel="bookmark">Gentlemen&#39;s suite for Maven</a>
+  </h2>
+  
+    <time datetime="2024-04-21T00:00:00Z">April 21, 2024</time>
+  
+</header>
+
+    <p>While there exist more modern tools to build a Java project Maven still remains #1 (my opinion).</p>
+<h1 id="in-project">
+  <a class="Heading-link u-clickable" href="/blog/gentlemens_suite_for_maven/#in-project">In project</a>
+</h1>
+<h2 id="enforcer-plugin">
+  <a class="Heading-link u-clickable" href="/blog/gentlemens_suite_for_maven/#enforcer-plugin">Enforcer plugin</a>
+</h2>
+<p><a href="https://maven.apache.org/enforcer/maven-enforcer-plugin/">Maven Enforcer plugin</a></p>
+<h3 id="always-executed">
+  <a class="Heading-link u-clickable" href="/blog/gentlemens_suite_for_maven/#always-executed">Always executed</a>
+</h3>
+<p><a href="https://maven.apache.org/enforcer/enforcer-rules/dependencyConvergence.html">Dependency Convergence rule</a></p>
+<h3 id="executed-during-release-on-ci">
+  <a class="Heading-link u-clickable" href="/blog/gentlemens_suite_for_maven/#executed-during-release-on-ci">Executed during release on CI</a>
+</h3>
+<p><a href="https://maven.apache.org/enforcer/enforcer-rules/requireReleaseDeps.html">Require Release Dependencies</a></p>
+
+<pre tabindex="0"><code>      &lt;plugin&gt;
+        &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
+        &lt;artifactId&gt;maven-enforcer-plugin&lt;/artifactId&gt;
+        &lt;version&gt;3.4.1&lt;/version&gt;
+        &lt;executions&gt;
+          &lt;execution&gt;
+            &lt;id&gt;enforce&lt;/id&gt;
+            &lt;configuration&gt;
+              &lt;rules&gt;
+                &lt;dependencyConvergence/&gt;
+              &lt;/rules&gt;
+            &lt;/configuration&gt;
+            &lt;goals&gt;
+              &lt;goal&gt;enforce&lt;/goal&gt;
+            &lt;/goals&gt;
+          &lt;/execution&gt;
+        &lt;/executions&gt;
+      &lt;/plugin&gt;
+      ```
+
+## Formatter
+
+[fmt-maven-plugin](https://github.com/spotify/fmt-maven-plugin)
+
+# In settings.xml
+
+
+# On CI
+
+
+[Maven Git versioning extension](https://github.com/qoomon/maven-git-versioning-extension)
+
+`.mvn/extensions.xml`:</code></pre>
+<p><extensions xmlns="http://maven.apache.org/EXTENSIONS/1.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:schemaLocation="http://maven.apache.org/EXTENSIONS/1.0.0 http://maven.apache.org/xsd/core-extensions-1.0.0.xsd"></p>
+<pre><code>&lt;extension&gt;
+    &lt;groupId&gt;me.qoomon&lt;/groupId&gt;
+    &lt;artifactId&gt;maven-git-versioning-extension&lt;/artifactId&gt;
+    &lt;version&gt;9.6.6&lt;/version&gt;
+&lt;/extension&gt;
+</code></pre>
+</extensions>
+```
+<p><code>maven-git-versioning-extension.xml</code>:</p>
+
+<pre tabindex="0"><code>&lt;configuration xmlns=&#34;https://github.com/qoomon/maven-git-versioning-extension&#34;
+               xmlns:xsi=&#34;http://www.w3.org/2001/XMLSchema-instance&#34;
+               xsi:schemaLocation=&#34;https://github.com/qoomon/maven-git-versioning-extension https://qoomon.github.io/maven-git-versioning-extension/configuration-9.4.0.xsd&#34;&gt;
+
+    &lt;refs&gt;
+        &lt;ref type=&#34;branch&#34;&gt;
+            &lt;pattern&gt;.+&lt;/pattern&gt;
+            &lt;version&gt;${ref}-SNAPSHOT&lt;/version&gt;
+            &lt;properties&gt;
+                &lt;foo&gt;${ref}&lt;/foo&gt;
+            &lt;/properties&gt;
+        &lt;/ref&gt;
+
+        &lt;ref type=&#34;tag&#34;&gt;
+            &lt;pattern&gt;&lt;![CDATA[v(?&lt;version&gt;.*)]]&gt;&lt;/pattern&gt;
+            &lt;version&gt;${ref.version}&lt;/version&gt;
+        &lt;/ref&gt;
+    &lt;/refs&gt;
+
+    &lt;!-- optional fallback configuration in case of no matching ref configuration--&gt;
+    &lt;rev&gt;
+        &lt;version&gt;${commit}&lt;/version&gt;
+    &lt;/rev&gt;
+
+&lt;/configuration&gt;</code></pre>
+
+    
+
+  
+
+  
+
+
+
+
+
+    
+  
+
+  </article>
+
+
+
+  
+
+      </div>
+    </div>
+  </main>
+  
+  
+  <footer class="Footer">
+    <div class="u-wrapper">
+      <div class="u-padding u-noboosting">
+        ©2024 Yauhen Lazurkin
+
+        
+          
+          <span class="footer-separator"> | </span><a class="footer-item" href="/imprint/">Imprint</a>
+        
+          
+          <span class="footer-separator"> | </span><a class="footer-item" href="/privacy/">Privacy</a>
+        
+      </div>
+    </div>
+  </footer>
+
+
+</body>
+
+</html>
