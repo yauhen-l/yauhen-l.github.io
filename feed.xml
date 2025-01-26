@@ -1,4 +1,182 @@
-<?xml version="1.0" encoding="utf-8"?><?xml-stylesheet type="text/xsl" href="https://www.lazurkin.de/xml/base.min.xml"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Lazurkin</title><link>https://www.lazurkin.de/</link><description>Recent content on Lazurkin</description><generator>Hugo -- gohugo.io</generator><language>en-US</language><lastBuildDate>Sun, 18 Feb 2024 12:59:59 +0100</lastBuildDate><atom:link rel="self" href="https://www.lazurkin.de/feed.xml" type="application/rss+xml"/><item><title>Modern CI antipattern</title><link>https://www.lazurkin.de/blog/modern_ci_antipattern/</link><pubDate>Thu, 07 Mar 2024 00:00:00 +0000</pubDate><guid>https://www.lazurkin.de/blog/modern_ci_antipattern/</guid><description>&lt;p>Have you ever used modern CI platforms like &lt;a href="https://docs.gitlab.com/ee/ci/">GitLab CI&lt;/a> or &lt;a href="https://docs.github.com/en/actions">GitHub Actions&lt;/a>?&lt;/p>
+<?xml version="1.0" encoding="utf-8"?><?xml-stylesheet type="text/xsl" href="https://www.lazurkin.de/xml/base.min.xml"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Lazurkin</title><link>https://www.lazurkin.de/</link><description>Recent content on Lazurkin</description><generator>Hugo -- gohugo.io</generator><language>en-US</language><lastBuildDate>Sun, 18 Feb 2024 12:59:59 +0100</lastBuildDate><atom:link rel="self" href="https://www.lazurkin.de/feed.xml" type="application/rss+xml"/><item><title>Reliable Garden (DevOps tool) on CI</title><link>https://www.lazurkin.de/blog/reliable_garden_on_ci/</link><pubDate>Sun, 26 Jan 2025 15:17:29 +0100</pubDate><guid>https://www.lazurkin.de/blog/reliable_garden_on_ci/</guid><description>&lt;div class="toc">
+&lt;nav id="TableOfContents">
+&lt;ul>
+&lt;li>&lt;a href="#challenge">Challenge&lt;/a>&lt;/li>
+&lt;li>&lt;a href="#solution">Solution&lt;/a>&lt;/li>
+&lt;li>&lt;a href="#implementation">Implementation&lt;/a>
+&lt;ul>
+&lt;li>&lt;a href="#1-git-proxy-fake-gitsh">1. Git Proxy (&lt;code>fake-git.sh&lt;/code>)&lt;/a>&lt;/li>
+&lt;li>&lt;a href="#2-helm-proxy-fake-helmsh">2. Helm Proxy (&lt;code>fake-helm.sh&lt;/code>)&lt;/a>&lt;/li>
+&lt;li>&lt;a href="#3--pipeline-configuration">3. Pipeline Configuration&lt;/a>&lt;/li>
+&lt;/ul>
+&lt;/li>
+&lt;li>&lt;a href="#conclusion">Conclusion&lt;/a>&lt;/li>
+&lt;/ul>
+&lt;/nav>
+&lt;/div>
+&lt;p>I worked on a project migrating an existing platform to the cloud. The platform consisted of 20+ services and infrastructure components including databases, message queues, blob storage, and observability tools. It featured an e2e-test suite for functional testing, executed on GitLab CI by spinning up the entire platform using docker-compose and running JUnit tests.&lt;/p>
+&lt;p>During migration, we replaced the centralized docker-compose setup with a distributed configuration using &lt;a href="https://github.com/garden-io/garden">Garden&lt;/a> v0.13.&lt;/p>
+&lt;!-- more -->
+&lt;h2 id="challenge">
+&lt;a class="Heading-link u-clickable" href="https://www.lazurkin.de/blog/reliable_garden_on_ci/#challenge">Challenge&lt;/a>
+&lt;/h2>
+&lt;p>Our e2e testing setup involved a Garden project that:&lt;/p>
+&lt;ol>
+&lt;li>Pulled projects from different Git repositories&lt;/li>
+&lt;li>Started required services in a dedicated Kubernetes(K8S) namespace&lt;/li>
+&lt;li>Built docker image with tests suite and executed it inside the same K8S namespace&lt;/li>
+&lt;li>Collected results&lt;/li>
+&lt;li>Either shut down the application (on success) or kept it running for investigation (on failure)&lt;/li>
+&lt;/ol>
+&lt;p>While this seemed ideal for Garden, the CI pipeline&amp;rsquo;s deployment stage faced several challenges:&lt;/p>
+&lt;ul>
+&lt;li>Overloading GitLab with repository pulls&lt;/li>
+&lt;li>Overloading the K8S API&lt;/li>
+&lt;li>Excessive memory consumption (up to 500MB per Helm process)&lt;/li>
+&lt;li>Extended pipeline duration due to repeated Helm dependency updates&lt;/li>
+&lt;/ul>
+&lt;h2 id="solution">
+&lt;a class="Heading-link u-clickable" href="https://www.lazurkin.de/blog/reliable_garden_on_ci/#solution">Solution&lt;/a>
+&lt;/h2>
+&lt;p>It was obvious that Garden lacks functionality to throttle number of parallel requests as well as retries of operations. Investigation revealed that Garden downloads tools to it&amp;rsquo;s &lt;strong>&lt;code>.garden&lt;/code>&lt;/strong> directory and executes them while parsing their output. I could add missing functionality by creating proxy shell scripts for these tools. I decided to go with retries for Git operations and throttling number of Helm processes. In result I would have the following process:&lt;/p>
+&lt;pre class="mermaid">graph TD
+A[CI Job Start] --> C[Replace Tools with Proxies]
+C --> D[Garden Deploy]
+D --> E[Git proxy]
+D --> F[Helm proxy]
+E -->|Retry Logic| E
+F -->|Process Limiting| F
+E --> G[Git]
+F --> H[Helm]
+&lt;/pre>
+&lt;h2 id="implementation">
+&lt;a class="Heading-link u-clickable" href="https://www.lazurkin.de/blog/reliable_garden_on_ci/#implementation">Implementation&lt;/a>
+&lt;/h2>
+&lt;h3 id="1-git-proxy-fake-gitsh">
+&lt;a class="Heading-link u-clickable" href="https://www.lazurkin.de/blog/reliable_garden_on_ci/#1-git-proxy-fake-gitsh">1. Git Proxy (&lt;code>fake-git.sh&lt;/code>)&lt;/a>
+&lt;/h3>
+&lt;p>Any debug output is commented, because Garden tries to parse it and fails.&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;">&lt;code class="language-bash" data-lang="bash">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#c00;font-weight:bold">#!/bin/bash
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#c00;font-weight:bold">&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#080;font-weight:bold">function&lt;/span> retry {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#038">local&lt;/span> &lt;span style="color:#369">retries&lt;/span>=&lt;span style="color:#369">$1&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#038">shift&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#038">local&lt;/span> &lt;span style="color:#369">count&lt;/span>=&lt;span style="color:#00d;font-weight:bold">0&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#080;font-weight:bold">until&lt;/span> &lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;&lt;/span>&lt;span style="color:#369">$@&lt;/span>&lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;&lt;/span>; &lt;span style="color:#080;font-weight:bold">do&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#369">exit&lt;/span>=&lt;span style="color:#369">$?&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#369">wait&lt;/span>=&lt;span style="color:#080;font-weight:bold">$((&lt;/span>&lt;span style="color:#00d;font-weight:bold">2&lt;/span> ** &lt;span style="color:#369">$count&lt;/span>&lt;span style="color:#080;font-weight:bold">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#369">count&lt;/span>=&lt;span style="color:#080;font-weight:bold">$((&lt;/span>&lt;span style="color:#369">$count&lt;/span> + &lt;span style="color:#00d;font-weight:bold">1&lt;/span>&lt;span style="color:#080;font-weight:bold">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#080;font-weight:bold">if&lt;/span> [ &lt;span style="color:#369">$count&lt;/span> -lt &lt;span style="color:#369">$retries&lt;/span> ]; &lt;span style="color:#080;font-weight:bold">then&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#888">#echo &amp;#34;Retry $count/$retries exited $exit, retrying in $wait seconds...&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> sleep &lt;span style="color:#369">$wait&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#080;font-weight:bold">else&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#888">#echo &amp;#34;Retry $count/$retries exited $exit, no more retries left.&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#080;font-weight:bold">return&lt;/span> &lt;span style="color:#369">$exit&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#080;font-weight:bold">fi&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#080;font-weight:bold">done&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#080;font-weight:bold">return&lt;/span> &lt;span style="color:#00d;font-weight:bold">0&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>retry &lt;span style="color:#00d;font-weight:bold">5&lt;/span> /usr/bin/git &lt;span style="color:#369">$@&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>
+&lt;p>The &lt;strong>&lt;code>fake-git.sh&lt;/code>&lt;/strong> script implements exponential backoff retry logic, attempting operations up to 5 times before failing.&lt;/p>
+&lt;h3 id="2-helm-proxy-fake-helmsh">
+&lt;a class="Heading-link u-clickable" href="https://www.lazurkin.de/blog/reliable_garden_on_ci/#2-helm-proxy-fake-helmsh">2. Helm Proxy (&lt;code>fake-helm.sh&lt;/code>)&lt;/a>
+&lt;/h3>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;">&lt;code class="language-bash" data-lang="bash">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#c00;font-weight:bold">#!/bin/bash
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#c00;font-weight:bold">&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#888">#echo &amp;#34;In FAKE_HELM! Args: $@&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#888"># Limit concurrent Helm processes to 8 (based on observed memory usage)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#080;font-weight:bold">function&lt;/span> canRun() {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#888"># Here helm~ is the original helm downloaded by Garden&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#369">COUNT&lt;/span>=&lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;&lt;/span>&lt;span style="color:#080;font-weight:bold">$(&lt;/span>ps aux | grep helm~ | &lt;span style="color:#04d;background-color:#fff0f0">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#04d;background-color:#fff0f0">&lt;/span> grep -v grep | awk &lt;span style="color:#d20;background-color:#fff0f0">&amp;#39;{print $2}&amp;#39;&lt;/span> | &lt;span style="color:#04d;background-color:#fff0f0">\
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#04d;background-color:#fff0f0">&lt;/span> wc -l | awk &lt;span style="color:#d20;background-color:#fff0f0">&amp;#39;{$1=$1;print}&amp;#39;&lt;/span>&lt;span style="color:#080;font-weight:bold">)&lt;/span>&lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#080;font-weight:bold">if&lt;/span> [[ &lt;span style="color:#33b;background-color:#fff0f0">${&lt;/span>&lt;span style="color:#369">COUNT&lt;/span>&lt;span style="color:#33b;background-color:#fff0f0">}&lt;/span> &amp;lt; &lt;span style="color:#00d;font-weight:bold">8&lt;/span> ]]; &lt;span style="color:#080;font-weight:bold">then&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#888">#echo &amp;#34;$(basename $0) is already running.&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#080;font-weight:bold">return&lt;/span> &lt;span style="color:#00d;font-weight:bold">0&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#080;font-weight:bold">fi&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#888">#echo &amp;#34;running $(basename $0)&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#080;font-weight:bold">return&lt;/span> &lt;span style="color:#00d;font-weight:bold">1&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#888"># Initial random delay (0-9 seconds) to prevent concurrent checks&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>sleep &lt;span style="color:#080;font-weight:bold">$((&lt;/span>RANDOM % &lt;span style="color:#00d;font-weight:bold">10&lt;/span>&lt;span style="color:#080;font-weight:bold">))&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#080;font-weight:bold">until&lt;/span> canRun
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#080;font-weight:bold">do&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> sleep &lt;span style="color:#00d;font-weight:bold">1&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#080;font-weight:bold">done&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#369">helmArgs&lt;/span>=&lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;&lt;/span>&lt;span style="color:#369">$@&lt;/span>&lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#888"># skip unnecessary package refreshes&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#080;font-weight:bold">if&lt;/span> [[ &lt;span style="color:#369">$helmArgs&lt;/span> == *&lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;dependency update&amp;#34;&lt;/span>* ]]; &lt;span style="color:#080;font-weight:bold">then&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#888">#echo &amp;#34;FAKE_HELM: adding --skip-refresh&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#369">helmArgs&lt;/span>=&lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;&lt;/span>&lt;span style="color:#369">$helmArgs&lt;/span>&lt;span style="color:#d20;background-color:#fff0f0"> --skip-refresh&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#080;font-weight:bold">fi&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#038">exec&lt;/span> &lt;span style="color:#080;font-weight:bold">$(&lt;/span>dirname &lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;&lt;/span>&lt;span style="color:#369">$0&lt;/span>&lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;&lt;/span>&lt;span style="color:#080;font-weight:bold">)&lt;/span>/helm~ &lt;span style="color:#369">$helmArgs&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>
+&lt;p>The &lt;strong>&lt;code>fake-helm.sh&lt;/code>&lt;/strong> script:&lt;/p>
+&lt;ul>
+&lt;li>Limits concurrent Helm processes to 8 (chosen based on our memory constraints: 8 * 500MB = 4GB max usage)&lt;/li>
+&lt;li>Skips redundant package refreshes&lt;/li>
+&lt;/ul>
+&lt;p>Limiting number of concurrent commands is achieved with &lt;strong>&lt;code>canRun&lt;/code>&lt;/strong> function which checks number of currently running &lt;strong>&lt;code>helm&lt;/code>&lt;/strong> processes and returns &lt;code>0&lt;/code> if we can run more processes or &lt;code>1&lt;/code> if limit is already reached. To make it work we also needed to introduce a random delay of command execution, otherwise all processes would simple pass the check. Of course, this logic does not give 100% guarantee of running less than defined limit, but is good enough to throttle parallel execution and make the pipeline stable.&lt;/p>
+&lt;p>Finally, to omit unecessary refreshes of packages the &lt;strong>&lt;code>fake-helm.sh&lt;/code>&lt;/strong> adds &lt;strong>&lt;code>--skip-refresh&lt;/code>&lt;/strong> flag to &lt;strong>&lt;code>helm dependency update&lt;/code>&lt;/strong> command, because it could be done only once at the beggining of the pipeline.&lt;/p>
+&lt;h3 id="3--pipeline-configuration">
+&lt;a class="Heading-link u-clickable" href="https://www.lazurkin.de/blog/reliable_garden_on_ci/#3--pipeline-configuration">3. Pipeline Configuration&lt;/a>
+&lt;/h3>
+&lt;p>And here is how our deployment job looked like in GitLab CI:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;">&lt;code class="language-yaml" data-lang="yaml">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#b06;font-weight:bold">deploy-application&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">stage&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>deploy&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">image&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">name&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>gardendev/garden:0.13-buster&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">pull_policy&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>if-not-present&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">resource_limits&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">memory&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>5Gi&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">cpu&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;2&amp;#34;&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">timeout&lt;/span>:&lt;span style="color:#bbb"> &lt;/span>1h&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">script&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#888"># Add extra Helm repositories&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- garden tools kubernetes.helm -- repo add bitnami https://charts.bitnami.com/bitnami&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#888"># Single repositories update&lt;/span>&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- garden tools kubernetes.helm -- repo update&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- ./prepare-fake-commands.sh || exit 1&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- garden deploy -l 4&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">artifacts&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>&lt;span style="color:#b06;font-weight:bold">paths&lt;/span>:&lt;span style="color:#bbb">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#bbb"> &lt;/span>- .garden/error.log&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>
+&lt;p>The only missing part is &lt;strong>&lt;code>prepare-fake-commands.sh&lt;/code>&lt;/strong> script which replaces original tools with our proxy-scripts:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;">&lt;code class="language-bash" data-lang="bash">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#c00;font-weight:bold">#!/bin/bash
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#c00;font-weight:bold">&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#038">set&lt;/span> -e &lt;span style="color:#888"># Exit on any error&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#369">helmLocation&lt;/span>=&lt;span style="color:#080;font-weight:bold">$(&lt;/span>garden tools kubernetes.helm --get-path&lt;span style="color:#080;font-weight:bold">)&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#038">echo&lt;/span> &lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;Garden Helm location: &lt;/span>&lt;span style="color:#369">$helmLocation&lt;/span>&lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>mv &lt;span style="color:#369">$helmLocation&lt;/span> &lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;&lt;/span>&lt;span style="color:#369">$helmLocation&lt;/span>&lt;span style="color:#d20;background-color:#fff0f0">~&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#038">echo&lt;/span> &lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;Copied original Garden Helm to: &lt;/span>&lt;span style="color:#33b;background-color:#fff0f0">${&lt;/span>&lt;span style="color:#369">helmLocation&lt;/span>&lt;span style="color:#33b;background-color:#fff0f0">}&lt;/span>&lt;span style="color:#d20;background-color:#fff0f0">~&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>cp ./fake-helm.sh &lt;span style="color:#369">$helmLocation&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#038">echo&lt;/span> &lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;Copied fake-helm.sh to: &lt;/span>&lt;span style="color:#33b;background-color:#fff0f0">${&lt;/span>&lt;span style="color:#369">helmLocation&lt;/span>&lt;span style="color:#33b;background-color:#fff0f0">}&lt;/span>&lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>cp ./fake-git.sh /garden/git
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#038">echo&lt;/span> &lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;Copied fake-git to: /garden/git&amp;#34;&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>ln -s &lt;span style="color:#080;font-weight:bold">$(&lt;/span>garden tools kubernetes.kubectl --get-path&lt;span style="color:#080;font-weight:bold">)&lt;/span> /garden/kubectl
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#038">echo&lt;/span> &lt;span style="color:#d20;background-color:#fff0f0">&amp;#34;Created link of garden kubectl to: /garden/kubectl&amp;#34;&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>
+&lt;h2 id="conclusion">
+&lt;a class="Heading-link u-clickable" href="https://www.lazurkin.de/blog/reliable_garden_on_ci/#conclusion">Conclusion&lt;/a>
+&lt;/h2>
+&lt;p>This is a story with happy end. My improvements significantly enhanced pipeline reliability while managing resource consumption effectively. However, it highlights an important lesson: modern tools, despite their promise, may not be fully mature. When applying them to your specific use case, be prepared to:&lt;/p>
+&lt;ul>
+&lt;li>Understand the tool&amp;rsquo;s internal workings&lt;/li>
+&lt;li>Create workarounds that respect the tool&amp;rsquo;s design&lt;/li>
+&lt;li>Monitor and measure the impact of your solutions&lt;/li>
+&lt;/ul>
+&lt;p>Remember: sometimes the simplest solution - like a shell script wrapper - can bridge the gap between a tool&amp;rsquo;s current capabilities and your production needs.&lt;/p></description></item><item><title>Modern CI antipattern</title><link>https://www.lazurkin.de/blog/modern_ci_antipattern/</link><pubDate>Thu, 07 Mar 2024 00:00:00 +0000</pubDate><guid>https://www.lazurkin.de/blog/modern_ci_antipattern/</guid><description>&lt;p>Have you ever used modern CI platforms like &lt;a href="https://docs.gitlab.com/ee/ci/">GitLab CI&lt;/a> or &lt;a href="https://docs.github.com/en/actions">GitHub Actions&lt;/a>?&lt;/p>
 &lt;p>Then you know that usually pipeline configuration comes from &lt;a href="https://yaml.org/">YAML&lt;/a> files. In most cases, this is not a single YAML but the whole jungle of files with references, inheritance, inlined shell scripts, and other disgusting things. I do see it as an antipattern people should avoid. Let&amp;rsquo;s see why.&lt;/p>
 &lt;div class="toc">
 &lt;nav id="TableOfContents">
