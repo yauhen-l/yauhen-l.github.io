@@ -1,4 +1,7 @@
-<?xml version="1.0" encoding="utf-8"?><?xml-stylesheet type="text/xsl" href="https://www.lazurkin.de/xml/base.min.xml"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>DevOps on Lazurkin</title><link>https://www.lazurkin.de/tags/devops/</link><description>Recent content in DevOps on Lazurkin</description><generator>Hugo -- gohugo.io</generator><language>en-US</language><lastBuildDate>Sun, 26 Jan 2025 15:17:29 +0100</lastBuildDate><atom:link rel="self" href="https://www.lazurkin.de/tags/devops/feed.xml" type="application/rss+xml"/><item><title>Reliable Garden (DevOps tool) on CI</title><link>https://www.lazurkin.de/blog/reliable_garden_on_ci/</link><pubDate>Sun, 26 Jan 2025 15:17:29 +0100</pubDate><guid>https://www.lazurkin.de/blog/reliable_garden_on_ci/</guid><description>&lt;div class="toc">
+<?xml version="1.0" encoding="utf-8"?><?xml-stylesheet type="text/xsl" href="https://www.lazurkin.de/xml/base.min.xml"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>DevOps on Lazurkin</title><link>https://www.lazurkin.de/tags/devops/</link><description>Recent content in DevOps on Lazurkin</description><generator>Hugo -- gohugo.io</generator><language>en-US</language><lastBuildDate>Sun, 26 Jan 2025 15:17:29 +0100</lastBuildDate><atom:link rel="self" href="https://www.lazurkin.de/tags/devops/feed.xml" type="application/rss+xml"/><item><title>Reliable Garden (DevOps tool) on CI</title><link>https://www.lazurkin.de/blog/reliable_garden_on_ci/</link><pubDate>Sun, 26 Jan 2025 15:17:29 +0100</pubDate><guid>https://www.lazurkin.de/blog/reliable_garden_on_ci/</guid><description>&lt;p>I worked on a project migrating an existing platform to the cloud. The platform consisted of 20+ services and infrastructure components including databases, message queues, blob storage, and observability tools. It featured an e2e-test suite for functional testing, executed on GitLab CI by spinning up the entire platform using docker-compose and running JUnit tests.&lt;/p>
+&lt;p>During migration, we replaced the centralized docker-compose setup with a distributed configuration using &lt;a href="https://github.com/garden-io/garden">Garden&lt;/a> v0.13.&lt;/p>
+&lt;!-- more -->
+&lt;div class="toc">
 &lt;nav id="TableOfContents">
 &lt;ul>
 &lt;li>&lt;a href="#challenge">Challenge&lt;/a>&lt;/li>
@@ -14,9 +17,6 @@
 &lt;/ul>
 &lt;/nav>
 &lt;/div>
-&lt;p>I worked on a project migrating an existing platform to the cloud. The platform consisted of 20+ services and infrastructure components including databases, message queues, blob storage, and observability tools. It featured an e2e-test suite for functional testing, executed on GitLab CI by spinning up the entire platform using docker-compose and running JUnit tests.&lt;/p>
-&lt;p>During migration, we replaced the centralized docker-compose setup with a distributed configuration using &lt;a href="https://github.com/garden-io/garden">Garden&lt;/a> v0.13.&lt;/p>
-&lt;!-- more -->
 &lt;h2 id="challenge">
 &lt;a class="Heading-link u-clickable" href="https://www.lazurkin.de/blog/reliable_garden_on_ci/#challenge">Challenge&lt;/a>
 &lt;/h2>
