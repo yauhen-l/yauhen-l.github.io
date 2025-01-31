@@ -1,0 +1,475 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<?xml-stylesheet type="text/xsl" href="http://192.168.2.197:1313/xml/base.min.xml" ?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Maven on Lazurkin</title>
+    <link>http://192.168.2.197:1313/tags/maven/</link>
+    <description>Recent content in Maven on Lazurkin</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-US</language>
+    <lastBuildDate>Sun, 21 Apr 2024 00:00:00 +0000</lastBuildDate>
+    <atom:link rel="self" href="http://192.168.2.197:1313/tags/maven/feed.xml" type="application/rss+xml" />
+    <item>
+      <title>Reliable Garden (DevOps tool) on CI</title>
+      <link>http://192.168.2.197:1313/blog/reliable_garden_on_ci/</link>
+      <pubDate>Sun, 26 Jan 2025 15:17:29 +0100</pubDate>
+      <guid>http://192.168.2.197:1313/blog/reliable_garden_on_ci/</guid>
+      <description>&lt;p&gt;I worked on a project migrating an existing platform to the cloud. The platform consisted of 20+ services and infrastructure components including databases, message queues, blob storage, and observability tools. It featured an e2e-test suite for functional testing, executed on GitLab CI by spinning up the entire platform using docker-compose and running JUnit tests.&lt;/p&gt;
+&lt;p&gt;During migration, we replaced the centralized docker-compose setup with a distributed configuration using &lt;a href=&#34;https://github.com/garden-io/garden&#34;&gt;Garden&lt;/a&gt; v0.13.&lt;/p&gt;
+&lt;!-- more --&gt;
+&lt;div class=&#34;toc&#34;&gt;
+  &lt;nav id=&#34;TableOfContents&#34;&gt;
+  &lt;ul&gt;
+    &lt;li&gt;&lt;a href=&#34;#challenge&#34;&gt;Challenge&lt;/a&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;a href=&#34;#solution&#34;&gt;Solution&lt;/a&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;a href=&#34;#implementation&#34;&gt;Implementation&lt;/a&gt;
+      &lt;ul&gt;
+        &lt;li&gt;&lt;a href=&#34;#1-git-proxy-fake-gitsh&#34;&gt;1. Git Proxy (&lt;code&gt;fake-git.sh&lt;/code&gt;)&lt;/a&gt;&lt;/li&gt;
+        &lt;li&gt;&lt;a href=&#34;#2-helm-proxy-fake-helmsh&#34;&gt;2. Helm Proxy (&lt;code&gt;fake-helm.sh&lt;/code&gt;)&lt;/a&gt;&lt;/li&gt;
+        &lt;li&gt;&lt;a href=&#34;#3--pipeline-configuration&#34;&gt;3.  Pipeline Configuration&lt;/a&gt;&lt;/li&gt;
+      &lt;/ul&gt;
+    &lt;/li&gt;
+    &lt;li&gt;&lt;a href=&#34;#conclusion&#34;&gt;Conclusion&lt;/a&gt;&lt;/li&gt;
+  &lt;/ul&gt;
+&lt;/nav&gt;
+&lt;/div&gt;
+
+&lt;h2 id=&#34;challenge&#34;&gt;
+  &lt;a class=&#34;Heading-link u-clickable&#34; href=&#34;http://192.168.2.197:1313/blog/reliable_garden_on_ci/#challenge&#34;&gt;Challenge&lt;/a&gt;
+&lt;/h2&gt;
+&lt;p&gt;Our e2e testing setup involved a Garden project that:&lt;/p&gt;
+&lt;ol&gt;
+&lt;li&gt;Pulled projects from different Git repositories&lt;/li&gt;
+&lt;li&gt;Started required services in a dedicated Kubernetes(K8S) namespace&lt;/li&gt;
+&lt;li&gt;Built docker image with tests suite and executed it inside the same K8S namespace&lt;/li&gt;
+&lt;li&gt;Collected results&lt;/li&gt;
+&lt;li&gt;Either shut down the application (on success) or kept it running for investigation (on failure)&lt;/li&gt;
+&lt;/ol&gt;
+&lt;p&gt;While this seemed ideal for Garden, the CI pipeline&amp;rsquo;s deployment stage faced several challenges:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Overloading GitLab with repository pulls&lt;/li&gt;
+&lt;li&gt;Overloading the K8S API&lt;/li&gt;
+&lt;li&gt;Excessive memory consumption (up to 500MB per Helm process)&lt;/li&gt;
+&lt;li&gt;Extended pipeline duration due to repeated Helm dependency updates&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&#34;solution&#34;&gt;
+  &lt;a class=&#34;Heading-link u-clickable&#34; href=&#34;http://192.168.2.197:1313/blog/reliable_garden_on_ci/#solution&#34;&gt;Solution&lt;/a&gt;
+&lt;/h2&gt;
+&lt;p&gt;It was obvious that Garden lacks functionality to throttle number of parallel requests as well as retries of operations. Investigation revealed that Garden downloads tools to it&amp;rsquo;s &lt;strong&gt;&lt;code&gt;.garden&lt;/code&gt;&lt;/strong&gt; directory and executes them while parsing their output. I could add missing functionality by creating proxy shell scripts for these tools. I decided to go with retries for Git operations and throttling number of Helm processes. In result I would have the following process:&lt;/p&gt;
+&lt;pre class=&#34;mermaid&#34;&gt;graph TD
+    A[CI Job Start] --&gt; C[Replace Tools with Proxies]
+    C --&gt; D[Garden Deploy]
+    D --&gt; E[Git proxy]
+    D --&gt; F[Helm proxy]
+    E --&gt;|Retry Logic| E
+    F --&gt;|Process Limiting| F
+    E --&gt; G[Git]
+    F --&gt; H[Helm]
+&lt;/pre&gt;
+
+
+&lt;h2 id=&#34;implementation&#34;&gt;
+  &lt;a class=&#34;Heading-link u-clickable&#34; href=&#34;http://192.168.2.197:1313/blog/reliable_garden_on_ci/#implementation&#34;&gt;Implementation&lt;/a&gt;
+&lt;/h2&gt;
+&lt;h3 id=&#34;1-git-proxy-fake-gitsh&#34;&gt;
+  &lt;a class=&#34;Heading-link u-clickable&#34; href=&#34;http://192.168.2.197:1313/blog/reliable_garden_on_ci/#1-git-proxy-fake-gitsh&#34;&gt;1. Git Proxy (&lt;code&gt;fake-git.sh&lt;/code&gt;)&lt;/a&gt;
+&lt;/h3&gt;
+&lt;p&gt;Any debug output is commented, because Garden tries to parse it and fails.&lt;/p&gt;
+
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;&#34;&gt;&lt;code class=&#34;language-bash&#34; data-lang=&#34;bash&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#c00;font-weight:bold&#34;&gt;#!/bin/bash
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#c00;font-weight:bold&#34;&gt;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;function&lt;/span&gt; retry {
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;  &lt;span style=&#34;color:#038&#34;&gt;local&lt;/span&gt; &lt;span style=&#34;color:#369&#34;&gt;retries&lt;/span&gt;=&lt;span style=&#34;color:#369&#34;&gt;$1&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;  &lt;span style=&#34;color:#038&#34;&gt;shift&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;  &lt;span style=&#34;color:#038&#34;&gt;local&lt;/span&gt; &lt;span style=&#34;color:#369&#34;&gt;count&lt;/span&gt;=&lt;span style=&#34;color:#00d;font-weight:bold&#34;&gt;0&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;  &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;until&lt;/span&gt; &lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;&lt;/span&gt;&lt;span style=&#34;color:#369&#34;&gt;$@&lt;/span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;&lt;/span&gt;; &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;do&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;    &lt;span style=&#34;color:#369&#34;&gt;exit&lt;/span&gt;=&lt;span style=&#34;color:#369&#34;&gt;$?&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;    &lt;span style=&#34;color:#369&#34;&gt;wait&lt;/span&gt;=&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;$((&lt;/span&gt;&lt;span style=&#34;color:#00d;font-weight:bold&#34;&gt;2&lt;/span&gt; ** &lt;span style=&#34;color:#369&#34;&gt;$count&lt;/span&gt;&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;))&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;    &lt;span style=&#34;color:#369&#34;&gt;count&lt;/span&gt;=&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;$((&lt;/span&gt;&lt;span style=&#34;color:#369&#34;&gt;$count&lt;/span&gt; + &lt;span style=&#34;color:#00d;font-weight:bold&#34;&gt;1&lt;/span&gt;&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;))&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;    &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;if&lt;/span&gt; [ &lt;span style=&#34;color:#369&#34;&gt;$count&lt;/span&gt; -lt &lt;span style=&#34;color:#369&#34;&gt;$retries&lt;/span&gt; ]; &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;then&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;      &lt;span style=&#34;color:#888&#34;&gt;#echo &amp;#34;Retry $count/$retries exited $exit, retrying in $wait seconds...&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;      sleep &lt;span style=&#34;color:#369&#34;&gt;$wait&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;    &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;else&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;      &lt;span style=&#34;color:#888&#34;&gt;#echo &amp;#34;Retry $count/$retries exited $exit, no more retries left.&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;      &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;return&lt;/span&gt; &lt;span style=&#34;color:#369&#34;&gt;$exit&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;    &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;fi&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;  &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;done&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;  &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;return&lt;/span&gt; &lt;span style=&#34;color:#00d;font-weight:bold&#34;&gt;0&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;}
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;retry &lt;span style=&#34;color:#00d;font-weight:bold&#34;&gt;5&lt;/span&gt; /usr/bin/git &lt;span style=&#34;color:#369&#34;&gt;$@&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The &lt;strong&gt;&lt;code&gt;fake-git.sh&lt;/code&gt;&lt;/strong&gt; script implements exponential backoff retry logic, attempting operations up to 5 times before failing.&lt;/p&gt;
+&lt;h3 id=&#34;2-helm-proxy-fake-helmsh&#34;&gt;
+  &lt;a class=&#34;Heading-link u-clickable&#34; href=&#34;http://192.168.2.197:1313/blog/reliable_garden_on_ci/#2-helm-proxy-fake-helmsh&#34;&gt;2. Helm Proxy (&lt;code&gt;fake-helm.sh&lt;/code&gt;)&lt;/a&gt;
+&lt;/h3&gt;
+
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;&#34;&gt;&lt;code class=&#34;language-bash&#34; data-lang=&#34;bash&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#c00;font-weight:bold&#34;&gt;#!/bin/bash
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#c00;font-weight:bold&#34;&gt;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#888&#34;&gt;#echo &amp;#34;In FAKE_HELM! Args: $@&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#888&#34;&gt;# Limit concurrent Helm processes to 8 (based on observed memory usage)&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;function&lt;/span&gt; canRun() {
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;  &lt;span style=&#34;color:#888&#34;&gt;# Here helm~ is the original helm downloaded by Garden&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;  &lt;span style=&#34;color:#369&#34;&gt;COUNT&lt;/span&gt;=&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;&lt;/span&gt;&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;$(&lt;/span&gt;ps aux | grep helm~ | &lt;span style=&#34;color:#04d;background-color:#fff0f0&#34;&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#04d;background-color:#fff0f0&#34;&gt;&lt;/span&gt;           grep -v grep | awk &lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#39;{print $2}&amp;#39;&lt;/span&gt; | &lt;span style=&#34;color:#04d;background-color:#fff0f0&#34;&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#04d;background-color:#fff0f0&#34;&gt;&lt;/span&gt;           wc -l | awk &lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#39;{$1=$1;print}&amp;#39;&lt;/span&gt;&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;)&lt;/span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;  &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;if&lt;/span&gt; [[ &lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;${&lt;/span&gt;&lt;span style=&#34;color:#369&#34;&gt;COUNT&lt;/span&gt;&lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;}&lt;/span&gt; &amp;lt; &lt;span style=&#34;color:#00d;font-weight:bold&#34;&gt;8&lt;/span&gt; ]]; &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;then&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;      &lt;span style=&#34;color:#888&#34;&gt;#echo &amp;#34;$(basename $0) is already running.&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;      &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;return&lt;/span&gt; &lt;span style=&#34;color:#00d;font-weight:bold&#34;&gt;0&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;  &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;fi&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;  &lt;span style=&#34;color:#888&#34;&gt;#echo &amp;#34;running $(basename $0)&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;  &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;return&lt;/span&gt; &lt;span style=&#34;color:#00d;font-weight:bold&#34;&gt;1&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;}
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#888&#34;&gt;# Initial random delay (0-9 seconds) to prevent concurrent checks&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;sleep &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;$((&lt;/span&gt;RANDOM % &lt;span style=&#34;color:#00d;font-weight:bold&#34;&gt;10&lt;/span&gt;&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;))&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;until&lt;/span&gt; canRun
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;do&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt; sleep &lt;span style=&#34;color:#00d;font-weight:bold&#34;&gt;1&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;done&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#369&#34;&gt;helmArgs&lt;/span&gt;=&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;&lt;/span&gt;&lt;span style=&#34;color:#369&#34;&gt;$@&lt;/span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#888&#34;&gt;# skip unnecessary package refreshes&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;if&lt;/span&gt; [[ &lt;span style=&#34;color:#369&#34;&gt;$helmArgs&lt;/span&gt; == *&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;dependency update&amp;#34;&lt;/span&gt;* ]]; &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;then&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;    &lt;span style=&#34;color:#888&#34;&gt;#echo &amp;#34;FAKE_HELM: adding --skip-refresh&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;    &lt;span style=&#34;color:#369&#34;&gt;helmArgs&lt;/span&gt;=&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;&lt;/span&gt;&lt;span style=&#34;color:#369&#34;&gt;$helmArgs&lt;/span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt; --skip-refresh&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;fi&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#038&#34;&gt;exec&lt;/span&gt; &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;$(&lt;/span&gt;dirname &lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;&lt;/span&gt;&lt;span style=&#34;color:#369&#34;&gt;$0&lt;/span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;&lt;/span&gt;&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;)&lt;/span&gt;/helm~ &lt;span style=&#34;color:#369&#34;&gt;$helmArgs&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The &lt;strong&gt;&lt;code&gt;fake-helm.sh&lt;/code&gt;&lt;/strong&gt; script:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Limits concurrent Helm processes to 8 (chosen based on our memory constraints: 8 * 500MB = 4GB max usage)&lt;/li&gt;
+&lt;li&gt;Skips redundant package refreshes&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Limiting number of concurrent commands is achieved with &lt;strong&gt;&lt;code&gt;canRun&lt;/code&gt;&lt;/strong&gt; function which checks number of currently running &lt;strong&gt;&lt;code&gt;helm&lt;/code&gt;&lt;/strong&gt; processes and returns &lt;code&gt;0&lt;/code&gt; if we can run more processes or &lt;code&gt;1&lt;/code&gt; if limit is already reached. To make it work we also needed to introduce a random delay of command execution, otherwise all processes would simple pass the check. Of course, this logic does not give 100% guarantee of running less than defined limit, but is good enough to throttle parallel execution and make the pipeline stable.&lt;/p&gt;
+&lt;p&gt;Finally, to omit unecessary refreshes of packages the &lt;strong&gt;&lt;code&gt;fake-helm.sh&lt;/code&gt;&lt;/strong&gt; adds &lt;strong&gt;&lt;code&gt;--skip-refresh&lt;/code&gt;&lt;/strong&gt; flag to &lt;strong&gt;&lt;code&gt;helm dependency update&lt;/code&gt;&lt;/strong&gt; command, because it could be  done only once at the beggining of the pipeline.&lt;/p&gt;
+&lt;h3 id=&#34;3--pipeline-configuration&#34;&gt;
+  &lt;a class=&#34;Heading-link u-clickable&#34; href=&#34;http://192.168.2.197:1313/blog/reliable_garden_on_ci/#3--pipeline-configuration&#34;&gt;3.  Pipeline Configuration&lt;/a&gt;
+&lt;/h3&gt;
+&lt;p&gt;And here is how our deployment job looked like in GitLab CI:&lt;/p&gt;
+
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;&#34;&gt;&lt;code class=&#34;language-yaml&#34; data-lang=&#34;yaml&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;deploy-application&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;stage&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;deploy&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;image&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;name&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;gardendev/garden:0.13-buster&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;pull_policy&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;if-not-present&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;resource_limits&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;memory&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;5Gi&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;cpu&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;2&amp;#34;&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;timeout&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;1h&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;script&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#888&#34;&gt;# Add extra Helm repositories&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;- garden tools kubernetes.helm -- repo add bitnami https://charts.bitnami.com/bitnami&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#888&#34;&gt;# Single repositories update&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;- garden tools kubernetes.helm -- repo update&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;- ./prepare-fake-commands.sh || exit 1&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;- garden deploy -l 4&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;artifacts&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;paths&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;      &lt;/span&gt;- .garden/error.log&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;The only missing part is &lt;strong&gt;&lt;code&gt;prepare-fake-commands.sh&lt;/code&gt;&lt;/strong&gt; script which replaces original tools with our proxy-scripts:&lt;/p&gt;
+
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;&#34;&gt;&lt;code class=&#34;language-bash&#34; data-lang=&#34;bash&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#c00;font-weight:bold&#34;&gt;#!/bin/bash
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#c00;font-weight:bold&#34;&gt;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#038&#34;&gt;set&lt;/span&gt; -e  &lt;span style=&#34;color:#888&#34;&gt;# Exit on any error&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#369&#34;&gt;helmLocation&lt;/span&gt;=&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;$(&lt;/span&gt;garden tools kubernetes.helm --get-path&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;)&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#038&#34;&gt;echo&lt;/span&gt; &lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;Garden Helm location: &lt;/span&gt;&lt;span style=&#34;color:#369&#34;&gt;$helmLocation&lt;/span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;mv &lt;span style=&#34;color:#369&#34;&gt;$helmLocation&lt;/span&gt; &lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;&lt;/span&gt;&lt;span style=&#34;color:#369&#34;&gt;$helmLocation&lt;/span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;~&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#038&#34;&gt;echo&lt;/span&gt; &lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;Copied original Garden Helm to: &lt;/span&gt;&lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;${&lt;/span&gt;&lt;span style=&#34;color:#369&#34;&gt;helmLocation&lt;/span&gt;&lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;}&lt;/span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;~&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;cp ./fake-helm.sh &lt;span style=&#34;color:#369&#34;&gt;$helmLocation&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#038&#34;&gt;echo&lt;/span&gt; &lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;Copied fake-helm.sh to: &lt;/span&gt;&lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;${&lt;/span&gt;&lt;span style=&#34;color:#369&#34;&gt;helmLocation&lt;/span&gt;&lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;}&lt;/span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;cp ./fake-git.sh /garden/git
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#038&#34;&gt;echo&lt;/span&gt; &lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;Copied fake-git to: /garden/git&amp;#34;&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;ln -s &lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;$(&lt;/span&gt;garden tools kubernetes.kubectl --get-path&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;)&lt;/span&gt; /garden/kubectl
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#038&#34;&gt;echo&lt;/span&gt; &lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;Created link of garden kubectl to: /garden/kubectl&amp;#34;&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;h2 id=&#34;conclusion&#34;&gt;
+  &lt;a class=&#34;Heading-link u-clickable&#34; href=&#34;http://192.168.2.197:1313/blog/reliable_garden_on_ci/#conclusion&#34;&gt;Conclusion&lt;/a&gt;
+&lt;/h2&gt;
+&lt;p&gt;This is a story with happy end. My improvements significantly enhanced pipeline reliability while managing resource consumption effectively. However, it highlights an important lesson: modern tools, despite their promise, may not be fully mature. When applying them to your specific use case, be prepared to:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Understand the tool&amp;rsquo;s internal workings&lt;/li&gt;
+&lt;li&gt;Create workarounds that respect the tool&amp;rsquo;s design&lt;/li&gt;
+&lt;li&gt;Monitor and measure the impact of your solutions&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Remember: sometimes the simplest solution - like a shell script wrapper - can bridge the gap between a tool&amp;rsquo;s current capabilities and your production needs.&lt;/p&gt;
+</description>
+    </item>
+    <item>
+      <title>Gentlemen&#39;s suite for Maven</title>
+      <link>http://192.168.2.197:1313/blog/gentlemens_suite_for_maven/</link>
+      <pubDate>Sun, 21 Apr 2024 00:00:00 +0000</pubDate>
+      <guid>http://192.168.2.197:1313/blog/gentlemens_suite_for_maven/</guid>
+      <description>&lt;p&gt;While there exist more modern tools to build a Java project Maven still remains robust solution to any project.&lt;/p&gt;
+&lt;h1 id=&#34;in-project&#34;&gt;
+  &lt;a class=&#34;Heading-link u-clickable&#34; href=&#34;http://192.168.2.197:1313/blog/gentlemens_suite_for_maven/#in-project&#34;&gt;In project&lt;/a&gt;
+&lt;/h1&gt;
+&lt;h2 id=&#34;enforcer-plugin&#34;&gt;
+  &lt;a class=&#34;Heading-link u-clickable&#34; href=&#34;http://192.168.2.197:1313/blog/gentlemens_suite_for_maven/#enforcer-plugin&#34;&gt;Enforcer plugin&lt;/a&gt;
+&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&#34;https://maven.apache.org/enforcer/maven-enforcer-plugin/&#34;&gt;Maven Enforcer plugin&lt;/a&gt;&lt;/p&gt;
+&lt;h3 id=&#34;always-executed&#34;&gt;
+  &lt;a class=&#34;Heading-link u-clickable&#34; href=&#34;http://192.168.2.197:1313/blog/gentlemens_suite_for_maven/#always-executed&#34;&gt;Always executed&lt;/a&gt;
+&lt;/h3&gt;
+&lt;p&gt;&lt;a href=&#34;https://maven.apache.org/enforcer/enforcer-rules/dependencyConvergence.html&#34;&gt;Dependency Convergence rule&lt;/a&gt;&lt;/p&gt;
+&lt;h3 id=&#34;executed-during-release-on-ci&#34;&gt;
+  &lt;a class=&#34;Heading-link u-clickable&#34; href=&#34;http://192.168.2.197:1313/blog/gentlemens_suite_for_maven/#executed-during-release-on-ci&#34;&gt;Executed during release on CI&lt;/a&gt;
+&lt;/h3&gt;
+&lt;p&gt;&lt;a href=&#34;https://maven.apache.org/enforcer/enforcer-rules/requireReleaseDeps.html&#34;&gt;Require Release Dependencies&lt;/a&gt;&lt;/p&gt;
+
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;      &amp;lt;plugin&amp;gt;
+        &amp;lt;groupId&amp;gt;org.apache.maven.plugins&amp;lt;/groupId&amp;gt;
+        &amp;lt;artifactId&amp;gt;maven-enforcer-plugin&amp;lt;/artifactId&amp;gt;
+        &amp;lt;version&amp;gt;3.4.1&amp;lt;/version&amp;gt;
+        &amp;lt;executions&amp;gt;
+          &amp;lt;execution&amp;gt;
+            &amp;lt;id&amp;gt;enforce&amp;lt;/id&amp;gt;
+            &amp;lt;configuration&amp;gt;
+              &amp;lt;rules&amp;gt;
+                &amp;lt;dependencyConvergence/&amp;gt;
+              &amp;lt;/rules&amp;gt;
+            &amp;lt;/configuration&amp;gt;
+            &amp;lt;goals&amp;gt;
+              &amp;lt;goal&amp;gt;enforce&amp;lt;/goal&amp;gt;
+            &amp;lt;/goals&amp;gt;
+          &amp;lt;/execution&amp;gt;
+        &amp;lt;/executions&amp;gt;
+      &amp;lt;/plugin&amp;gt;
+      ```
+
+## Formatter
+
+[fmt-maven-plugin](https://github.com/spotify/fmt-maven-plugin)
+
+# In settings.xml
+
+
+# On CI
+
+
+[Maven Git versioning extension](https://github.com/qoomon/maven-git-versioning-extension)
+
+`.mvn/extensions.xml`:&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;extensions xmlns=&#34;http://maven.apache.org/EXTENSIONS/1.0.0&#34; xmlns:xsi=&#34;http://www.w3.org/2001/XMLSchema-instance&#34;
+xsi:schemaLocation=&#34;http://maven.apache.org/EXTENSIONS/1.0.0 http://maven.apache.org/xsd/core-extensions-1.0.0.xsd&#34;&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code&gt;&amp;lt;extension&amp;gt;
+    &amp;lt;groupId&amp;gt;me.qoomon&amp;lt;/groupId&amp;gt;
+    &amp;lt;artifactId&amp;gt;maven-git-versioning-extension&amp;lt;/artifactId&amp;gt;
+    &amp;lt;version&amp;gt;9.6.6&amp;lt;/version&amp;gt;
+&amp;lt;/extension&amp;gt;
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/extensions&gt;
+```
+&lt;p&gt;&lt;code&gt;maven-git-versioning-extension.xml&lt;/code&gt;:&lt;/p&gt;
+
+&lt;pre tabindex=&#34;0&#34;&gt;&lt;code&gt;&amp;lt;configuration xmlns=&amp;#34;https://github.com/qoomon/maven-git-versioning-extension&amp;#34;
+               xmlns:xsi=&amp;#34;http://www.w3.org/2001/XMLSchema-instance&amp;#34;
+               xsi:schemaLocation=&amp;#34;https://github.com/qoomon/maven-git-versioning-extension https://qoomon.github.io/maven-git-versioning-extension/configuration-9.4.0.xsd&amp;#34;&amp;gt;
+
+    &amp;lt;refs&amp;gt;
+        &amp;lt;ref type=&amp;#34;branch&amp;#34;&amp;gt;
+            &amp;lt;pattern&amp;gt;.+&amp;lt;/pattern&amp;gt;
+            &amp;lt;version&amp;gt;${ref}-SNAPSHOT&amp;lt;/version&amp;gt;
+            &amp;lt;properties&amp;gt;
+                &amp;lt;foo&amp;gt;${ref}&amp;lt;/foo&amp;gt;
+            &amp;lt;/properties&amp;gt;
+        &amp;lt;/ref&amp;gt;
+
+        &amp;lt;ref type=&amp;#34;tag&amp;#34;&amp;gt;
+            &amp;lt;pattern&amp;gt;&amp;lt;![CDATA[v(?&amp;lt;version&amp;gt;.*)]]&amp;gt;&amp;lt;/pattern&amp;gt;
+            &amp;lt;version&amp;gt;${ref.version}&amp;lt;/version&amp;gt;
+        &amp;lt;/ref&amp;gt;
+    &amp;lt;/refs&amp;gt;
+
+    &amp;lt;!-- optional fallback configuration in case of no matching ref configuration--&amp;gt;
+    &amp;lt;rev&amp;gt;
+        &amp;lt;version&amp;gt;${commit}&amp;lt;/version&amp;gt;
+    &amp;lt;/rev&amp;gt;
+
+&amp;lt;/configuration&amp;gt;&lt;/code&gt;&lt;/pre&gt;
+</description>
+    </item>
+    <item>
+      <title>Modern CI antipattern</title>
+      <link>http://192.168.2.197:1313/blog/modern_ci_antipattern/</link>
+      <pubDate>Thu, 07 Mar 2024 00:00:00 +0000</pubDate>
+      <guid>http://192.168.2.197:1313/blog/modern_ci_antipattern/</guid>
+      <description>&lt;p&gt;Have you ever used modern CI platforms like &lt;a href=&#34;https://docs.gitlab.com/ee/ci/&#34;&gt;GitLab CI&lt;/a&gt; or &lt;a href=&#34;https://docs.github.com/en/actions&#34;&gt;GitHub Actions&lt;/a&gt;?&lt;/p&gt;
+&lt;p&gt;Then you know that usually pipeline configuration comes from &lt;a href=&#34;https://yaml.org/&#34;&gt;YAML&lt;/a&gt; files. In most cases, this is not a single YAML but the whole jungle of files with references, inheritance, inlined shell scripts, and other disgusting things. I do see it as an antipattern people should avoid. Let&amp;rsquo;s see why.&lt;/p&gt;
+&lt;div class=&#34;toc&#34;&gt;
+  &lt;nav id=&#34;TableOfContents&#34;&gt;
+  &lt;ul&gt;
+    &lt;li&gt;&lt;a href=&#34;#case-study&#34;&gt;Case study&lt;/a&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;a href=&#34;#whats-wrong-with-it&#34;&gt;What&amp;rsquo;s wrong with it?&lt;/a&gt;&lt;/li&gt;
+    &lt;li&gt;&lt;a href=&#34;#what-to-do&#34;&gt;What to do?&lt;/a&gt;&lt;/li&gt;
+  &lt;/ul&gt;
+&lt;/nav&gt;
+&lt;/div&gt;
+
+&lt;h2 id=&#34;case-study&#34;&gt;
+  &lt;a class=&#34;Heading-link u-clickable&#34; href=&#34;http://192.168.2.197:1313/blog/modern_ci_antipattern/#case-study&#34;&gt;Case study&lt;/a&gt;
+&lt;/h2&gt;
+&lt;p&gt;This site you are currently reading is a static site generated with &lt;a href=&#34;https://gohugo.io/&#34;&gt;Hugo&lt;/a&gt; and hosted on &lt;a href=&#34;https://pages.github.com/&#34;&gt;GitHub Pages&lt;/a&gt;. One option to publish the site to GitHub Pages is to use GitHub Actions which I considered.&lt;/p&gt;
+&lt;p&gt;So let&amp;rsquo;s take a look at the proposed &lt;a href=&#34;https://gohugo.io/hosting-and-deployment/hosting-on-github/&#34;&gt;Deploy Hugo site to GitHub Pages&lt;/a&gt; pipeline:&lt;/p&gt;
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;&#34;&gt;&lt;code class=&#34;language-yaml&#34; data-lang=&#34;yaml&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#888&#34;&gt;# Sample workflow for building and deploying a Hugo site to GitHub Pages&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;&lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;name&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;Deploy Hugo site to Pages&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;&lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;on&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#888&#34;&gt;# Runs on pushes targeting the default branch&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;push&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;branches&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;      &lt;/span&gt;- main&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#888&#34;&gt;# Allows you to run this workflow manually from the Actions tab&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;workflow_dispatch&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;&lt;/span&gt;&lt;span style=&#34;color:#888&#34;&gt;# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;&lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;permissions&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;contents&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;read&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;pages&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;write&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;id-token&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;write&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;&lt;/span&gt;&lt;span style=&#34;color:#888&#34;&gt;# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;&lt;/span&gt;&lt;span style=&#34;color:#888&#34;&gt;# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;&lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;concurrency&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;group&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;pages&amp;#34;&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;cancel-in-progress&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;&lt;span style=&#34;color:#080;font-weight:bold&#34;&gt;false&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;&lt;/span&gt;&lt;span style=&#34;color:#888&#34;&gt;# Default to bash&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;&lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;defaults&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;run&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;shell&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;bash&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;&lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;jobs&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#888&#34;&gt;# Build job&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;build&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;runs-on&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;ubuntu-latest&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;env&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;      &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;HUGO_VERSION&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;&lt;span style=&#34;color:#00d;font-weight:bold&#34;&gt;0.123.0&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;steps&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;      &lt;/span&gt;- &lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;name&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;Install Hugo CLI&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;        &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;run&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;|&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;          wget -O ${{ runner.temp }}/hugo.deb \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;          https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;          &amp;amp;&amp;amp; sudo dpkg -i ${{ runner.temp }}/hugo.deb&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;          
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;      &lt;/span&gt;- &lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;name&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;Install Dart Sass&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;        &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;run&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;sudo snap install dart-sass&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;      &lt;/span&gt;- &lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;name&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;Checkout&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;        &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;uses&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;actions/checkout@v4&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;        &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;with&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;          &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;submodules&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;recursive&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;          &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;fetch-depth&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;&lt;span style=&#34;color:#00d;font-weight:bold&#34;&gt;0&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;      &lt;/span&gt;- &lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;name&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;Setup Pages&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;        &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;id&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;pages&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;        &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;uses&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;actions/configure-pages@v4&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;      &lt;/span&gt;- &lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;name&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;Install Node.js dependencies&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;        &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;run&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;[[ -f package-lock.json || -f npm-shrinkwrap.json ]] &amp;amp;&amp;amp; npm ci || true&amp;#34;&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;      &lt;/span&gt;- &lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;name&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;Build with Hugo&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;        &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;env&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;          &lt;/span&gt;&lt;span style=&#34;color:#888&#34;&gt;# For maximum backward compatibility with Hugo modules&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;          &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;HUGO_ENVIRONMENT&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;production&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;          &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;HUGO_ENV&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;production&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;        &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;run&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;|&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;          hugo \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;            --gc \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;            --minify \
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;            --baseURL &amp;#34;${{ steps.pages.outputs.base_url }}/&amp;#34;&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;          
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;      &lt;/span&gt;- &lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;name&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;Upload artifact&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;        &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;uses&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;actions/upload-pages-artifact@v2&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;        &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;with&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;          &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;path&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;./public&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#888&#34;&gt;# Deployment job&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;deploy&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;environment&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;      &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;name&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;github-pages&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;      &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;url&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;${{ steps.deployment.outputs.page_url }}&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;runs-on&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;ubuntu-latest&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;needs&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;build&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;steps&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;      &lt;/span&gt;- &lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;name&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;Deploy to GitHub Pages&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;        &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;id&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;deployment&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;        &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;uses&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;actions/deploy-pages@v3&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;
+&lt;p&gt;Just to generate a static site and make it available on GitHub Pages you would need:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;
+&lt;p&gt;80 lines of &lt;a href=&#34;https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions&#34;&gt;GitHub Actions YAML DSL&lt;/a&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Inline shell scripts which should be the easiest part here
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;&#34;&gt;&lt;code class=&#34;language-sh&#34; data-lang=&#34;sh&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;wget -O &lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;${&lt;/span&gt;{ runner.temp &lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;}&lt;/span&gt;}/hugo.deb &lt;span style=&#34;color:#04d;background-color:#fff0f0&#34;&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#04d;background-color:#fff0f0&#34;&gt;&lt;/span&gt;  https://github.com/gohugoio/hugo/releases/download/v&lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;${&lt;/span&gt;&lt;span style=&#34;color:#369&#34;&gt;HUGO_VERSION&lt;/span&gt;&lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;}&lt;/span&gt;/hugo_extended_&lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;${&lt;/span&gt;&lt;span style=&#34;color:#369&#34;&gt;HUGO_VERSION&lt;/span&gt;&lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;}&lt;/span&gt;_linux-amd64.deb &lt;span style=&#34;color:#04d;background-color:#fff0f0&#34;&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#04d;background-color:#fff0f0&#34;&gt;&lt;/span&gt;  &amp;amp;&amp;amp; sudo dpkg -i &lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;${&lt;/span&gt;{ runner.temp &lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;}&lt;/span&gt;}/hugo.deb
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;...
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;[[ -f package-lock.json || -f npm-shrinkwrap.json ]] &amp;amp;&amp;amp; npm ci || &lt;span style=&#34;color:#038&#34;&gt;true&lt;/span&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;...
+&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;hugo &lt;span style=&#34;color:#04d;background-color:#fff0f0&#34;&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#04d;background-color:#fff0f0&#34;&gt;&lt;/span&gt;  --gc &lt;span style=&#34;color:#04d;background-color:#fff0f0&#34;&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#04d;background-color:#fff0f0&#34;&gt;&lt;/span&gt;  --minify &lt;span style=&#34;color:#04d;background-color:#fff0f0&#34;&gt;\
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#04d;background-color:#fff0f0&#34;&gt;&lt;/span&gt;  --baseURL &lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;&amp;#34;&lt;/span&gt;&lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;${&lt;/span&gt;{ steps.pages.outputs.base_url &lt;span style=&#34;color:#33b;background-color:#fff0f0&#34;&gt;}&lt;/span&gt;&lt;span style=&#34;color:#d20;background-color:#fff0f0&#34;&gt;}/&amp;#34;&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;li&gt;
+&lt;p&gt;Magic values (the most problematic part in my opinion)
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;&#34;&gt;&lt;code class=&#34;language-yaml&#34; data-lang=&#34;yaml&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;uses&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;actions/configure-pages@v4&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;&lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;...&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;&lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;uses&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;actions/upload-pages-artifact@v2&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;&lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;...&lt;/span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;&lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;uses&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;actions/deploy-pages@v3&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;&lt;/span&gt;```&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/p&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;These magic values are GitHub Actions carefully prepared by the GitHub Actions Team for your convenience.&lt;/p&gt;
+&lt;p&gt;For example &lt;a href=&#34;https://github.com/actions/upload-pages-artifact/blob/v2/action.yml&#34;&gt;actions/upload-pages-artifact@v2&lt;/a&gt; is a 71 lines YAML file, while
+&lt;a href=&#34;https://github.com/actions/configure-pages/tree/v4&#34;&gt;actions/configure-pages@v4&lt;/a&gt; and &lt;a href=&#34;https://github.com/actions/deploy-pages/tree/v3&#34;&gt;actions/deploy-pages@v3&lt;/a&gt; are 2 complex JavaScript based actions. If not getting deep into implementation details you at least would need to understand how to use these building blocks, their input and output parameters. And it is not as straightforward as with any programming language you used to work.&lt;/p&gt;
+&lt;h2 id=&#34;whats-wrong-with-it&#34;&gt;
+  &lt;a class=&#34;Heading-link u-clickable&#34; href=&#34;http://192.168.2.197:1313/blog/modern_ci_antipattern/#whats-wrong-with-it&#34;&gt;What&amp;rsquo;s wrong with it?&lt;/a&gt;
+&lt;/h2&gt;
+&lt;p&gt;The example above is a very simple task - publishing a static site. In enterprise development, CI pipelines are way more complicated with testing, linting, versioning, and other activities. And if you fall into a trap of all these convenient actions and templates, you start including them in your project, configuring them with parameters for your needs, inheriting them, producing your own actions and templates, and spawning tons of interconnected YAML files. It is a project in itself that requires heavy maintenance. In big companies there even could be a dedicated team to support CI setup.&lt;/p&gt;
+&lt;p&gt;Here are the disadvantages of this technique:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;It is not possible to run CI scripts locally. After making a change to a CI script you can verify it only on a CI platform&lt;/li&gt;
+&lt;li&gt;As a result, there are different approaches to local development and CI&lt;/li&gt;
+&lt;li&gt;CI scripts require heavy maintenance, sometimes even consuming the capacity of a whole team&lt;/li&gt;
+&lt;li&gt;Most likely pipelines will consist of many steps, running in different containers, consuming a lot of resources, and taking a lot of time&lt;/li&gt;
+&lt;li&gt;If there is a dedicated team to maintain CI scripts then:
+&lt;ul&gt;
+&lt;li&gt;they will produce generic scripts to meet the needs of all teams even more increasing the complexity&lt;/li&gt;
+&lt;li&gt;developers will be detached from all these scripts caring only about the &amp;ldquo;green&amp;rdquo; pipeline without trying to understand the details&lt;/li&gt;
+&lt;li&gt;I&amp;rsquo;ve seen a case when a pipeline was &amp;ldquo;green&amp;rdquo; and both parties thought that everything is fine, although it was not&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;A complex CI setup results in a CI platform vendor lock-in&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&#34;what-to-do&#34;&gt;
+  &lt;a class=&#34;Heading-link u-clickable&#34; href=&#34;http://192.168.2.197:1313/blog/modern_ci_antipattern/#what-to-do&#34;&gt;What to do?&lt;/a&gt;
+&lt;/h2&gt;
+&lt;p&gt;Having already a list of problems we need to do the opposite to avoid them.&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;CI has to be based on something that developers are not only able to run locally but do regularly. So it has to be part of building tooling&lt;/li&gt;
+&lt;li&gt;CI scripts have to be a thin layer to run your regular build tools only passing needed configuration&lt;/li&gt;
+&lt;li&gt;Don&amp;rsquo;t build generic solutions on CI. Like tests, CI has to be plain and straightforward&lt;/li&gt;
+&lt;li&gt;Keep CI scripts as abstract as possible delegating all details to the project you&amp;rsquo;re building&lt;/li&gt;
+&lt;li&gt;Don&amp;rsquo;t prepare an environment for CI in your CI scripts. Instead, prepare it in advance&lt;/li&gt;
+&lt;li&gt;Developers have to be responsible for CI and not a dedicated team that knows how to do it better&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;An ideal CI pipeline definition would be:
+&lt;div class=&#34;highlight&#34;&gt;&lt;pre tabindex=&#34;0&#34; style=&#34;background-color:#fff;-moz-tab-size:2;-o-tab-size:2;tab-size:2;&#34;&gt;&lt;code class=&#34;language-yaml&#34; data-lang=&#34;yaml&#34;&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;jobs&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;  &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;build&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;runs-on&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;prebuilt-docker-image-for-ci&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;    &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;steps&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;      &lt;/span&gt;- &lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;name&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;Build&lt;span style=&#34;color:#bbb&#34;&gt;
+&lt;/span&gt;&lt;/span&gt;&lt;/span&gt;&lt;span style=&#34;display:flex;&#34;&gt;&lt;span&gt;&lt;span style=&#34;color:#bbb&#34;&gt;        &lt;/span&gt;&lt;span style=&#34;color:#b06;font-weight:bold&#34;&gt;run&lt;/span&gt;:&lt;span style=&#34;color:#bbb&#34;&gt; &lt;/span&gt;make build&lt;/span&gt;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/p&gt;
+&lt;p&gt;First of all, you prepare an environment for your job in advance - &lt;code&gt;prebuilt-docker-image-for-ci&lt;/code&gt;. And the second you hide all details in a &lt;a href=&#34;https://www.gnu.org/software/make/manual/make.html&#34;&gt;Makefile&lt;/a&gt;.  That&amp;rsquo;s it! You easily can port this setup to any CI platform and any project can be adapted to this script.&lt;/p&gt;
+&lt;p&gt;Yes, in this case, you won&amp;rsquo;t have a fancy pipeline diagram and to understand what failed you need to look into logs, but it is the most &lt;strong&gt;efficient&lt;/strong&gt; and &lt;strong&gt;natural&lt;/strong&gt; approach. An error message from the log can be attached to the failed build notification, so you don&amp;rsquo;t even need to look at the diagram. But if the industry needs these diagrams then I&amp;rsquo;d say even more - CI platforms have to be able to understand the output of all popular build tools and visualize pipelines instead of forcing us to adapt to them.&lt;/p&gt;
+&lt;p&gt;Of course, the ideal cannot be achieved in every case, but at least you know another perspective and can find a balance.&lt;/p&gt;
+&lt;p&gt;Let&amp;rsquo;s not be fooled by the sham convenience of modern CI platforms and keep things simple.&lt;/p&gt;</description>
+    </item>
+  </channel>
+</rss>
