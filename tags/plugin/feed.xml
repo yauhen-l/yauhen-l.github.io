@@ -10,6 +10,23 @@
     <lastBuildDate>Sat, 01 Jun 2024 00:00:00 +0000</lastBuildDate>
     <atom:link rel="self" href="http://localhost:1313/tags/plugin/feed.xml" type="application/rss+xml" />
     <item>
+      <title>RSS feeds aggregator in Telegram</title>
+      <link>http://localhost:1313/blog/rss_to_telegram/</link>
+      <pubDate>Thu, 08 Jan 2026 13:34:55 +0100</pubDate>
+      <guid>http://localhost:1313/blog/rss_to_telegram/</guid>
+      <description>&lt;p&gt;For me an RSS feeds aggregator is the most convenient way to consume news.&lt;/p&gt;
+&lt;p&gt;When Google Reeder shut down I switched to &lt;a href=&#34;https://feedly.com/&#34;&gt;Feedly&lt;/a&gt;, then I tried self hosted &lt;a href=&#34;https://selfoss.aditu.de/&#34;&gt;Selfoss&lt;/a&gt;, but eventually came up with something even simpler.&lt;/p&gt;
+&lt;p&gt;As my main IM application is Telegram I found it the best place to put RSS news. Especially because Telegram has links previews and search and anything could be either pinned or sent to Saved Messages or to anyone else.&lt;/p&gt;
+&lt;p&gt;And the whole solution is fit into 58 lines of code!&lt;/p&gt;
+
+&lt;div class=&#34;centered-image&#34;&gt;
+  &lt;img src=&#34;http://localhost:1313/blog/rss_to_telegram/telegram-rss-example.png&#34; alt=&#34;telegram-rss-example.png&#34; /&gt;
+&lt;/div&gt;
+
+&lt;p&gt;&lt;a href=&#34;https://github.com/yauhen-l/rss2gram&#34;&gt;https://github.com/yauhen-l/rss2gram&lt;/a&gt;&lt;/p&gt;
+</description>
+    </item>
+    <item>
       <title>Reliable Garden (DevOps tool) on CI</title>
       <link>http://localhost:1313/blog/reliable_garden_on_ci/</link>
       <pubDate>Sun, 26 Jan 2025 15:17:29 +0100</pubDate>
