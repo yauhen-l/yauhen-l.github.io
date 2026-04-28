@@ -1,0 +1,12 @@
+<svg width="28" height="28" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="64" height="64" fill="oklch(0.12 0.02 260)"/>
+                    <rect x="8" y="14" width="48" height="36" rx="4" stroke="currentColor" stroke-width="2.5" fill="none" style="color: oklch(0.85 0.01 260 / 0.7)"/>
+                    <rect x="22" y="50" width="20" height="3" rx="1.5" style="fill: oklch(0.85 0.01 260 / 0.5)"/>
+                    <circle cx="32" cy="32" r="14" stroke="currentColor" stroke-width="1.5" fill="none" style="color: oklch(0.7 0.2 45 / 0.4)"/>
+                    <circle cx="32" cy="32" r="10" stroke="currentColor" stroke-width="1.5" fill="none" style="color: oklch(0.7 0.2 45 / 0.6)"/>
+                    <circle cx="32" cy="32" r="6" stroke="currentColor" stroke-width="1.5" fill="none" style="color: oklch(0.7 0.2 45 / 0.8)"/>
+                    <circle cx="32" cy="32" r="2" style="fill: oklch(0.7 0.2 45)"/>
+                    <path d="M 32 32 L 44 20 A 17 17 0 0 0 38 18" stroke="currentColor" stroke-width="8" fill="none" stroke-linecap="round" style="color: oklch(0.7 0.2 45 / 0.2); filter: blur(4px)"/>
+                    <line x1="32" y1="32" x2="44" y2="20" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="color: oklch(0.7 0.2 45); filter: drop-shadow(0 0 3px oklch(0.7 0.2 45 / 0.8))"/>
+                    <circle cx="44" cy="20" r="3" style="fill: oklch(0.7 0.2 45); filter: drop-shadow(0 0 6px oklch(0.7 0.2 45)) drop-shadow(0 0 12px oklch(0.7 0.2 45 / 0.6))"/>
+                </svg>
